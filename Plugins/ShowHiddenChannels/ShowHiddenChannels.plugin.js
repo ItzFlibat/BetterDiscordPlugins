@@ -1,7 +1,7 @@
 /**
  * @name ShowHiddenChannels
  * @displayName Show Hidden Channels
- * @version 2.2.3
+ * @version 2.2.4
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/ShowHiddenChannels
@@ -488,7 +488,7 @@
             )
         );
     } // ./src/config.json
-    const config_namespaceObject = /*#__PURE__*/ JSON.parse('{"UU":"ShowHiddenChannels","rE":"2.2.3"}'); // ./src/styles.ts
+    const config_namespaceObject = /*#__PURE__*/ JSON.parse('{"UU":"ShowHiddenChannels","rE":"2.2.4"}'); // ./src/styles.ts
     /*
      * BetterDiscordPlugins
      * Copyright (c) 2026 ItzFlibat
@@ -553,8 +553,11 @@
                     }
                 ])
             );
-            clone.shownChannelIds = ids(category.shownChannelIds);
-            clone.hiddenChannelIds = category.hiddenChannelIds && ids(category.hiddenChannelIds);
+            // Discord computes these lazily and leaves the field null until the getter runs.
+            const anyCategory = category;
+            clone.shownChannelIds = ids(anyCategory.getShownChannelIds?.() ?? category.shownChannelIds);
+            const hidden = anyCategory.getHiddenChannelIds?.() ?? category.hiddenChannelIds;
+            clone.hiddenChannelIds = hidden && ids(hidden);
             if (settings.shouldShowEmptyCategory) clone.shouldShowEmptyCategory = () => true;
             categories.push(clone);
             return clone;

@@ -31,8 +31,11 @@ export function transformChannelList(
         clone.channels = Object.fromEntries(
             Object.entries(category.channels ?? {}).map(([id, row]) => [id, { ...copy(row), category: clone }])
         );
-        clone.shownChannelIds = ids(category.shownChannelIds);
-        clone.hiddenChannelIds = category.hiddenChannelIds && ids(category.hiddenChannelIds);
+        // Discord computes these lazily and leaves the field null until the getter runs.
+        const anyCategory = category as any;
+        clone.shownChannelIds = ids(anyCategory.getShownChannelIds?.() ?? category.shownChannelIds);
+        const hidden = anyCategory.getHiddenChannelIds?.() ?? category.hiddenChannelIds;
+        clone.hiddenChannelIds = hidden && ids(hidden);
         if (settings.shouldShowEmptyCategory) clone.shouldShowEmptyCategory = () => true;
         categories.push(clone);
         return clone;
