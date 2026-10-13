@@ -38,6 +38,11 @@ export default class ShowHiddenChannels {
             return;
         }
         this.dependencyAttempts = 0;
+        library.registerPlugin?.({
+            id: config.name,
+            version: config.version,
+            changelog: [{ type: "added", title: "Updates", items: ["Update checks and change notices through YACBDP."] }]
+        });
         let loaded: ReturnType<typeof loadModules>;
         try {
             loaded = loadModules();

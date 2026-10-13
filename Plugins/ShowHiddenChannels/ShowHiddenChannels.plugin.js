@@ -1,7 +1,7 @@
 /**
  * @name ShowHiddenChannels
  * @displayName Show Hidden Channels
- * @version 2.1.0
+ * @version 2.2.0
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/ShowHiddenChannels
@@ -291,7 +291,7 @@ function Lockscreen({
   }, "Channel information is limited to data Discord has already sent to your client.")));
 }
 ;// ./src/config.json
-const config_namespaceObject = /*#__PURE__*/JSON.parse('{"UU":"ShowHiddenChannels","rE":"2.1.0"}');
+const config_namespaceObject = /*#__PURE__*/JSON.parse('{"UU":"ShowHiddenChannels","rE":"2.2.0"}');
 ;// ./src/styles.ts
 /*
  * BetterDiscordPlugins
@@ -512,6 +512,15 @@ class ShowHiddenChannels {
       return;
     }
     this.dependencyAttempts = 0;
+    library.registerPlugin?.({
+      id: config_namespaceObject.UU,
+      version: config_namespaceObject.rE,
+      changelog: [{
+        type: "added",
+        title: "Updates",
+        items: ["Update checks and change notices through YACBDP."]
+      }]
+    });
     let loaded;
     try {
       loaded = loadModules();
