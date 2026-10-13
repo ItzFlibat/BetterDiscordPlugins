@@ -15,6 +15,7 @@ interface Service {
 }
 
 const PLUGIN_NAME = "BetterDiscordBadges";
+const BADGE_ID_PREFIX = "yacbdp-";
 const API_URL = "https://alliance.flibat.com/api/badges/users";
 const REFRESH_INTERVAL = 30 * 60 * 1000;
 const SERVICES: Service[] = [
@@ -109,7 +110,7 @@ export default class BetterDiscordBadges {
         this.dependencyAttempts = 0;
         this.request?.abort();
         if (this.interval) clearInterval(this.interval);
-        this.patch?.();
+        BdApi.Patcher.unpatchAll(PLUGIN_NAME);
         this.patch = undefined;
     }
 
@@ -200,6 +201,32 @@ export default class BetterDiscordBadges {
             if (badges.length === 0) return;
             args[0] = { ...props, pendingBadges: [...(props.pendingBadges ?? []), ...badges] };
         });
+        // Discord appends pending badges after its own, so reorder the rendered rows to put ours first.
+        BdApi.Patcher.after(PLUGIN_NAME, module, key, (_: unknown, __: any[], result: any) => this.reorder(result));
+    }
+
+    private reorder(result: any) {
+        const rows = result?.props?.children;
+        if (!Array.isArray(rows)) return result;
+        const lists: any[][] = rows.map((row: any) => row?.props?.badges);
+        if (!lists.every(Array.isArray)) return result;
+        const all = lists.flat();
+        const ours = (badge: any) => typeof badge?.id === "string" && badge.id.startsWith(BADGE_ID_PREFIX);
+        const allicord = (badge: any) => badge.id.startsWith(`${BADGE_ID_PREFIX}allicord-`);
+        const sorted = [
+            ...all.filter(allicord),
+            ...all.filter(badge => ours(badge) && !allicord(badge)),
+            ...all.filter(badge => !ours(badge))
+        ];
+        if (sorted.every((badge, index) => badge === all[index])) return result;
+        let offset = 0;
+        const children = rows.map((row: any, index: number) => {
+            const length = lists[index].length;
+            const badges = sorted.slice(offset, offset + length);
+            offset += length;
+            return BdApi.React.cloneElement(row, { badges });
+        });
+        return BdApi.React.cloneElement(result, {}, ...children);
     }
 
     private async loadBadges() {
@@ -241,7 +268,7 @@ export default class BetterDiscordBadges {
             const key = `${badge.mod}:${badge.tooltip}:${url}`;
             if (seen.has(key)) return [];
             seen.add(key);
-            return [{ id: `yacbdp-${badge.mod}-${index}`, description: badge.tooltip, iconSrc: url }];
+            return [{ id: `${BADGE_ID_PREFIX}${badge.mod}-${index}`, description: badge.tooltip, iconSrc: url }];
         });
         this.cache.set(userId, { key: cacheKey, badges });
         return badges;
