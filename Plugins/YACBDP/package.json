@@ -1,7 +1,7 @@
 {
     "name": "yacbdp",
     "description": "Shared runtime and plugin dashboard for Yet Another Collection of BetterDiscord Plugins.",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "private": true,
     "main": "YACBDP.plugin.js",
     "scripts": {

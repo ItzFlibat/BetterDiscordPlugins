@@ -24,7 +24,7 @@ type LibrarySettings = { checkForUpdates: boolean; autoUpdate: boolean; notifyOn
 const PLUGIN_NAME = "YACBDP";
 const VERSION = config.version;
 const RAW_BASE = "https://raw.githubusercontent.com/ItzFlibat/BetterDiscordPlugins/refs/heads/main/Plugins";
-const CHECK_INTERVAL = 4 * 60 * 60 * 1000;
+const CHECK_INTERVAL = 5 * 60 * 1000;
 const DEFAULT_SETTINGS: LibrarySettings = { checkForUpdates: true, autoUpdate: true, notifyOnUpdate: true, notifyOnPluginUpdated: true };
 const MANAGED_PLUGINS: ManagedPlugin[] = [
     { id: "YACBDP", name: "YACBDP", description: "Shared settings, update checks, and plugin dashboard." },
@@ -345,7 +345,7 @@ function buildDashboard() {
                     type: "switch",
                     id: "checkForUpdates",
                     name: "Check for plugin updates",
-                    note: "Checks GitHub every few hours for newer versions of the collection plugins.",
+                    note: "Checks GitHub every few minutes for newer versions of the collection plugins.",
                     value: state.settings.checkForUpdates
                 },
                 {

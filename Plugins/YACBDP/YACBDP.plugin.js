@@ -1,7 +1,7 @@
 /**
  * @name YACBDP
  * @displayName YACBDP
- * @version 1.2.0
+ * @version 1.2.1
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/YACBDP
@@ -40,12 +40,12 @@
     }); // ./src/config.json
 
     const config_namespaceObject = /*#__PURE__*/ JSON.parse(
-        '{"rE":"1.2.0","cy":"ItzFlibat","h_":"Shared runtime and plugin dashboard for Yet Another Collection of BetterDiscord Plugins."}'
+        '{"rE":"1.2.1","cy":"ItzFlibat","h_":"Shared runtime and plugin dashboard for Yet Another Collection of BetterDiscord Plugins."}'
     ); // ./src/index.tsx
     const PLUGIN_NAME = "YACBDP";
     const VERSION = config_namespaceObject.rE;
     const RAW_BASE = "https://raw.githubusercontent.com/ItzFlibat/BetterDiscordPlugins/refs/heads/main/Plugins";
-    const CHECK_INTERVAL = 4 * 60 * 60 * 1000;
+    const CHECK_INTERVAL = 5 * 60 * 1000;
     const DEFAULT_SETTINGS = {
         checkForUpdates: true,
         autoUpdate: true,
@@ -405,7 +405,7 @@
                         type: "switch",
                         id: "checkForUpdates",
                         name: "Check for plugin updates",
-                        note: "Checks GitHub every few hours for newer versions of the collection plugins.",
+                        note: "Checks GitHub every few minutes for newer versions of the collection plugins.",
                         value: state.settings.checkForUpdates
                     },
                     {
