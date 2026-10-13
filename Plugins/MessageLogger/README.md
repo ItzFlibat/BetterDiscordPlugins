@@ -12,13 +12,14 @@ MessageLogger keeps a local history of deleted messages and message edits that D
 ## Features and settings
 
 - Records message deletions, bulk deletions, and prior content when an edit arrives.
-- Keeps logs across Discord restarts using BetterDiscord's local plugin data.
-- Open a channel log from its context menu; submenu actions export the channel as JSON or clear its saved entries.
+- Keeps logs in memory only. Everything is removed when Discord reloads or the plugin stops, and nothing is written to disk.
+- Open a channel log from its context menu; submenu actions export the channel as JSON or clear its entries.
 - Choose whether to log edits, deletions, or direct messages; ignore bot messages or selected user/channel IDs.
-- Set a retention period and maximum number of entries.
+- Set a maximum number of entries kept for the session.
+- Deleted messages, including your own, stay visible in the chat, highlighted, until Discord reloads.
 - Ephemeral messages are skipped.
 
-The plugin can only record events delivered to the running client. It cannot recover messages or edits from before it was enabled, and it does not retrieve message content from Discord's servers. Logs can contain private message content and attachment links; they remain in local BetterDiscord plugin data until removed or expired. Review and clear them on shared devices.
+The plugin can only record events delivered to the running client. It cannot recover messages or edits from before it was enabled, and it does not retrieve message content from Discord's servers. Logs can contain private message content and attachment links; they stay in memory only and disappear when Discord reloads.
 
 ## Development
 

@@ -1,7 +1,7 @@
 {
     "name": "messagelogger",
     "description": "Locally records deleted messages and message edits for review in BetterDiscord.",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "private": true,
     "main": "MessageLogger.plugin.js",
     "scripts": {

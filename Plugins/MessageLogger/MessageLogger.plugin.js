@@ -1,7 +1,7 @@
 /**
  * @name MessageLogger
  * @displayName Message Logger
- * @version 1.3.0
+ * @version 1.4.0
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/MessageLogger
@@ -39,7 +39,7 @@
         default: () => /* binding */ MessageLogger
     }); // ./src/config.json
 
-    const config_namespaceObject = { rE: "1.3.0" }; // ./src/index.tsx
+    const config_namespaceObject = { rE: "1.4.0" }; // ./src/index.tsx
     const DEFAULT_SETTINGS = {
         logDeletes: true,
         keepDeletedVisible: true,
@@ -48,7 +48,6 @@
         ignoreBots: false,
         ignoredUserIds: "",
         ignoredChannelIds: "",
-        retentionDays: 30,
         maxEntries: 5000
     };
     const PLUGIN_NAME = "MessageLogger";
@@ -101,18 +100,24 @@
                         items: ["Deleted messages from other people stay visible in the chat, highlighted, and are recorded reliably."]
                     },
                     {
+                        type: "improved",
+                        title: "Session only",
+                        items: ["Logs are kept in memory and removed on reload. Your own deletions are logged and kept visible too."]
+                    },
+                    {
                         type: "fixed",
                         title: "Edits",
                         items: ["Message edits are now recorded."]
                     }
                 ]
             });
-            this.logs = BdApi.Data.load(PLUGIN_NAME, LOG_KEY) ?? [];
+            // Logs live in memory only and disappear when the client reloads. Remove anything an older version saved.
+            this.logs = [];
+            BdApi.Data.delete(PLUGIN_NAME, LOG_KEY);
             this.settings = {
                 ...DEFAULT_SETTINGS,
                 ...(BdApi.Data.load(PLUGIN_NAME, SETTINGS_KEY) ?? {})
             };
-            this.prune();
             this.dispatcher =
                 BdApi.Webpack.getByKeys("dispatch", "subscribe", "flushWaitQueue") ??
                 BdApi.Webpack.getByKeys("actionLogger", "dispatch") ??
@@ -146,13 +151,13 @@
                 }
                 return original.apply(instance, args);
             });
-            BdApi.Logger.info(PLUGIN_NAME, `Recording message events. ${this.logs.length} entries stored.`);
+            BdApi.Logger.info(PLUGIN_NAME, `Recording message events. ${this.logs.length} entries this session.`);
             this.patchMenus();
         }
         stop() {
             if (this.dependencyTimer) clearTimeout(this.dependencyTimer);
             this.dependencyAttempts = 0;
-            if (this.saveTimer) this.flush();
+            this.logs = [];
             BdApi.Patcher.unpatchAll(PLUGIN_NAME);
             BdApi.DOM.removeStyle(GHOST_STYLE_ID);
             this.ghosts = [];
@@ -185,7 +190,7 @@
                             type: "switch",
                             id: "keepDeletedVisible",
                             name: "Keep deleted messages visible",
-                            note: "Deleted messages from other people stay in the chat, highlighted, until you reload Discord.",
+                            note: "Deleted messages stay in the chat, highlighted, until you reload Discord. Your own deletions are logged too.",
                             value: this.settings.keepDeletedVisible
                         },
                         {
@@ -229,16 +234,8 @@
                         },
                         {
                             type: "number",
-                            id: "retentionDays",
-                            name: "Keep entries for days (0 = forever)",
-                            value: this.settings.retentionDays,
-                            min: 0,
-                            max: 3650
-                        },
-                        {
-                            type: "number",
                             id: "maxEntries",
-                            name: "Maximum stored entries",
+                            name: "Maximum entries kept until Discord reloads",
                             value: this.settings.maxEntries,
                             min: 100,
                             max: 50000
@@ -291,8 +288,6 @@
         }
         keepVisible(message, channelId) {
             if (!this.settings.keepDeletedVisible) return false;
-            const currentUser = BdApi.Webpack.getStore("UserStore")?.getCurrentUser?.();
-            if (currentUser && String(message.author?.id) === String(currentUser.id)) return false;
             this.ghosts.push(`chat-messages-${channelId}-${message.id}`);
             if (this.ghosts.length > 300) this.ghosts.shift();
             this.updateGhostStyle();
@@ -362,24 +357,9 @@ ${selector.map(item => `${item} [class*="contents"]::after`).join(",")} { conten
             this.logs.push(entry);
             this.prune();
         }
-        scheduleSave() {
-            if (this.saveTimer) return;
-            this.saveTimer = setTimeout(() => this.flush(), 2000);
-        }
-        flush() {
-            if (this.saveTimer) clearTimeout(this.saveTimer);
-            this.saveTimer = undefined;
-            BdApi.Data.save(PLUGIN_NAME, LOG_KEY, this.logs);
-        }
         prune() {
-            const retention = Number(this.settings.retentionDays);
-            if (retention > 0) {
-                const cutoff = Date.now() - retention * 86400000;
-                this.logs = this.logs.filter(entry => Date.parse(entry.occurredAt) >= cutoff);
-            }
             const maximum = Math.max(100, Number(this.settings.maxEntries) || DEFAULT_SETTINGS.maxEntries);
             if (this.logs.length > maximum) this.logs = this.logs.slice(-maximum);
-            this.scheduleSave();
         }
         ids(value) {
             return new Set(
@@ -516,7 +496,6 @@ ${selector.map(item => `${item} [class*="contents"]::after`).join(",")} { conten
         }
         clearChannel(channelId) {
             this.logs = this.logs.filter(entry => entry.message.channelId !== channelId);
-            this.flush();
             BdApi.UI.showToast("Channel log cleared.", {
                 type: "success"
             });
