@@ -104,10 +104,53 @@ export default class ShowHiddenChannels {
         this.originalCan = undefined;
     }
 
+    private failures = new Set<string>();
+
+    private report(key: unknown, error: unknown): void {
+        const name = String(key);
+        if (this.failures.has(name)) return;
+        this.failures.add(name);
+        this.api.Logger.error(`A patch on ${name} failed and was skipped, so Discord's own behavior was kept.`, error);
+    }
+
+    // An error inside a patched store or action breaks Discord's own loading, so every patch falls back to the original behavior.
+    private after(target: any, key: string, callback: (instance: any, args: any, result: any) => any): void {
+        this.api.Patcher.after(target, key, (instance: any, args: any[], result: any) => {
+            try {
+                return callback(instance, args, result);
+            } catch (error) {
+                this.report(key, error);
+                return result;
+            }
+        });
+    }
+
+    private before(target: any, key: string, callback: (instance: any, args: any) => void): void {
+        this.api.Patcher.before(target, key, (instance: any, args: any[]) => {
+            try {
+                callback(instance, args);
+            } catch (error) {
+                this.report(key, error);
+            }
+        });
+    }
+
+    private instead(target: any, key: string, callback: (instance: any, args: any, original: (...args: any[]) => any) => any): void {
+        this.api.Patcher.instead(target, key, (instance: any, args: any[], original: (...args: any[]) => any) => {
+            try {
+                return callback(instance, args, original);
+            } catch (error) {
+                this.report(key, error);
+                return original(...args);
+            }
+        });
+    }
+
     private isHidden(channel?: Channel): boolean {
         return !!(
             channel?.guild_id &&
             channelTypes[channel.type] &&
+            typeof channel.id === "string" &&
             !channel.id.endsWith("_hidden") &&
             this.originalCan &&
             !this.originalCan(VIEW_CHANNEL, channel)
@@ -124,21 +167,14 @@ export default class ShowHiddenChannels {
     }
 
     private patchPermissions(modules: Modules): void {
-        this.api.Patcher.instead(
-            modules.ChannelRecord.prototype,
-            "isHidden",
-            (channel: Channel, _args: unknown[], original: () => boolean) =>
-                channel.guild_id && channelTypes[channel.type] ? this.isHidden(channel) : original()
+        this.instead(modules.ChannelRecord.prototype, "isHidden", (channel: Channel, _args: unknown[], original: () => boolean) =>
+            channel.guild_id && channelTypes[channel.type] ? this.isHidden(channel) : original()
         );
-        this.api.Patcher.after(
-            modules.PermissionStore,
-            "can",
-            (_instance: unknown, [permission, channel]: [bigint, Channel], result: boolean) => {
-                if (!this.isHidden(channel)) return result;
-                if (permission === CONNECT) return false;
-                return permission === VIEW_CHANNEL && this.shouldShow(channel) ? true : result;
-            }
-        );
+        this.after(modules.PermissionStore, "can", (_instance: unknown, [permission, channel]: [bigint, Channel], result: boolean) => {
+            if (!this.isHidden(channel)) return result;
+            if (permission === CONNECT) return false;
+            return permission === VIEW_CHANNEL && this.shouldShow(channel) ? true : result;
+        });
     }
 
     private patchMessages(modules: Modules): void {
@@ -153,19 +189,15 @@ export default class ShowHiddenChannels {
             "_sendMessage"
         ]) {
             if (typeof modules.MessageActions[key] !== "function") continue;
-            this.api.Patcher.instead(
-                modules.MessageActions,
-                key,
-                (_instance: unknown, args: any[], original: (...args: any[]) => unknown) => {
-                    const id = typeof args[0] === "string" ? args[0] : (args[0]?.channelId ?? args[0]?.channel_id);
-                    return this.isHidden(modules.ChannelStore.getChannel(id)) ? Promise.resolve() : original(...args);
-                }
-            );
+            this.instead(modules.MessageActions, key, (_instance: unknown, args: any[], original: (...args: any[]) => unknown) => {
+                const id = typeof args[0] === "string" ? args[0] : (args[0]?.channelId ?? args[0]?.channel_id);
+                return this.isHidden(modules.ChannelStore.getChannel(id)) ? Promise.resolve() : original(...args);
+            });
         }
     }
 
     private patchRoute(modules: Modules): void {
-        this.api.Patcher.after(modules.Route.object, modules.Route.key, (_instance: unknown, _args: unknown[], result: any) => {
+        this.after(modules.Route.object, modules.Route.key, (_instance: unknown, _args: unknown[], result: any) => {
             const params = result?.props?.computedMatch?.params ?? result?.props?.match?.params;
             const channel = params?.channelId && modules.ChannelStore.getChannel(params.channelId);
             if (!this.shouldShow(channel) || channel.id === modules.SelectedChannelStore?.getVoiceChannelId()) return result;
@@ -187,7 +219,7 @@ export default class ShowHiddenChannels {
             "hasUnreadPins"
         ]) {
             if (typeof store[key] !== "function") continue;
-            this.api.Patcher.after(store, key, (_instance: unknown, [value]: [string | Channel], result: unknown) => {
+            this.after(store, key, (_instance: unknown, [value]: [string | Channel], result: unknown) => {
                 const channel = typeof value === "string" ? modules.ChannelStore.getChannel(value) : value;
                 if (!this.settings.hideUnreads || !this.shouldShow(channel)) return result;
                 if (key === "getGuildChannelUnreadState") return { ...(result as object), mentionCount: 0, unread: false };
@@ -214,12 +246,12 @@ export default class ShowHiddenChannels {
     }
 
     private patchChannelList(modules: Modules): void {
-        this.api.Patcher.after(modules.ChannelStore, "getChannel", (_instance: unknown, [id]: [string], result: Channel | undefined) => {
+        this.after(modules.ChannelStore, "getChannel", (_instance: unknown, [id]: [string], result: Channel | undefined) => {
             if (typeof id !== "string" || !id.endsWith("_hidden")) return result;
             const guildId = id.slice(0, -7);
             return this.extraCategory(modules, guildId, modules.ChannelStore.getMutableGuildChannelsForGuild(guildId)) ?? result;
         });
-        this.api.Patcher.after(
+        this.after(
             modules.ChannelStore,
             "getMutableGuildChannelsForGuild",
             (_instance: unknown, [guildId]: [string], result: Record<string, Channel>) => {
@@ -229,7 +261,7 @@ export default class ShowHiddenChannels {
             }
         );
         if (modules.GuildChannelStore?.getChannels) {
-            this.api.Patcher.after(
+            this.after(
                 modules.GuildChannelStore,
                 "getChannels",
                 (_instance: unknown, [guildId]: [string], result: Record<number, any[]>) => {
@@ -243,7 +275,7 @@ export default class ShowHiddenChannels {
                 }
             );
         }
-        this.api.Patcher.after(modules.ChannelListStore, "getGuild", (_instance: unknown, [guildId]: [string], result: GuildList) => {
+        this.after(modules.ChannelListStore, "getGuild", (_instance: unknown, [guildId]: [string], result: GuildList) => {
             if (!result?.guildChannels || this.settings.blacklistedGuilds[guildId]) return result;
             if (this.settings.sort === "native" && !this.settings.shouldShowEmptyCategory) return result;
             const transformed = transformChannelList(
@@ -263,7 +295,7 @@ export default class ShowHiddenChannels {
 
     private patchChannelItem(modules: Modules): void {
         if (modules.ChannelIcon) {
-            this.api.Patcher.before(modules.ChannelIcon.object, modules.ChannelIcon.key, (_instance: unknown, args: any[]) => {
+            this.before(modules.ChannelIcon.object, modules.ChannelIcon.key, (_instance: unknown, args: any[]) => {
                 if (this.shouldShow(args[0]) && args[2]?.locked) args[2] = { ...args[2], locked: false };
             });
         }
@@ -275,7 +307,7 @@ export default class ShowHiddenChannels {
             );
             return;
         }
-        this.api.Patcher.after(modules.ChannelItem.object, modules.ChannelItem.key, (_instance: unknown, [props]: [any], result: any) => {
+        this.after(modules.ChannelItem.object, modules.ChannelItem.key, (_instance: unknown, [props]: [any], result: any) => {
             const channel = props?.channel as Channel | undefined;
             if (!channel || !this.shouldShow(channel)) return result;
             const vocal = channel.type === 2 || channel.type === 13;

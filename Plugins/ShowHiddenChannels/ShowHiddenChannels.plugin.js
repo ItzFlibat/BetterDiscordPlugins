@@ -1,7 +1,7 @@
 /**
  * @name ShowHiddenChannels
  * @displayName Show Hidden Channels
- * @version 2.2.1
+ * @version 2.2.2
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/ShowHiddenChannels
@@ -488,7 +488,7 @@
             )
         );
     } // ./src/config.json
-    const config_namespaceObject = /*#__PURE__*/ JSON.parse('{"UU":"ShowHiddenChannels","rE":"2.2.1"}'); // ./src/styles.ts
+    const config_namespaceObject = /*#__PURE__*/ JSON.parse('{"UU":"ShowHiddenChannels","rE":"2.2.2"}'); // ./src/styles.ts
     /*
      * BetterDiscordPlugins
      * Copyright (c) 2026 ItzFlibat
@@ -796,10 +796,49 @@
             this.modules = undefined;
             this.originalCan = undefined;
         }
+        failures = new Set();
+        report(key, error) {
+            const name = String(key);
+            if (this.failures.has(name)) return;
+            this.failures.add(name);
+            this.api.Logger.error(`A patch on ${name} failed and was skipped, so Discord's own behavior was kept.`, error);
+        }
+
+        // An error inside a patched store or action breaks Discord's own loading, so every patch falls back to the original behavior.
+        after(target, key, callback) {
+            this.api.Patcher.after(target, key, (instance, args, result) => {
+                try {
+                    return callback(instance, args, result);
+                } catch (error) {
+                    this.report(key, error);
+                    return result;
+                }
+            });
+        }
+        before(target, key, callback) {
+            this.api.Patcher.before(target, key, (instance, args) => {
+                try {
+                    callback(instance, args);
+                } catch (error) {
+                    this.report(key, error);
+                }
+            });
+        }
+        instead(target, key, callback) {
+            this.api.Patcher.instead(target, key, (instance, args, original) => {
+                try {
+                    return callback(instance, args, original);
+                } catch (error) {
+                    this.report(key, error);
+                    return original(...args);
+                }
+            });
+        }
         isHidden(channel) {
             return !!(
                 channel?.guild_id &&
                 channelTypes[channel.type] &&
+                typeof channel.id === "string" &&
                 !channel.id.endsWith("_hidden") &&
                 this.originalCan &&
                 !this.originalCan(VIEW_CHANNEL, channel)
@@ -814,10 +853,10 @@
             );
         }
         patchPermissions(modules) {
-            this.api.Patcher.instead(modules.ChannelRecord.prototype, "isHidden", (channel, _args, original) =>
+            this.instead(modules.ChannelRecord.prototype, "isHidden", (channel, _args, original) =>
                 channel.guild_id && channelTypes[channel.type] ? this.isHidden(channel) : original()
             );
-            this.api.Patcher.after(modules.PermissionStore, "can", (_instance, [permission, channel], result) => {
+            this.after(modules.PermissionStore, "can", (_instance, [permission, channel], result) => {
                 if (!this.isHidden(channel)) return result;
                 if (permission === CONNECT) return false;
                 return permission === VIEW_CHANNEL && this.shouldShow(channel) ? true : result;
@@ -835,14 +874,14 @@
                 "_sendMessage"
             ]) {
                 if (typeof modules.MessageActions[key] !== "function") continue;
-                this.api.Patcher.instead(modules.MessageActions, key, (_instance, args, original) => {
+                this.instead(modules.MessageActions, key, (_instance, args, original) => {
                     const id = typeof args[0] === "string" ? args[0] : (args[0]?.channelId ?? args[0]?.channel_id);
                     return this.isHidden(modules.ChannelStore.getChannel(id)) ? Promise.resolve() : original(...args);
                 });
             }
         }
         patchRoute(modules) {
-            this.api.Patcher.after(modules.Route.object, modules.Route.key, (_instance, _args, result) => {
+            this.after(modules.Route.object, modules.Route.key, (_instance, _args, result) => {
                 const params = result?.props?.computedMatch?.params ?? result?.props?.match?.params;
                 const channel = params?.channelId && modules.ChannelStore.getChannel(params.channelId);
                 if (!this.shouldShow(channel) || channel.id === modules.SelectedChannelStore?.getVoiceChannelId()) return result;
@@ -868,7 +907,7 @@
                 "hasUnreadPins"
             ]) {
                 if (typeof store[key] !== "function") continue;
-                this.api.Patcher.after(store, key, (_instance, [value], result) => {
+                this.after(store, key, (_instance, [value], result) => {
                     const channel = typeof value === "string" ? modules.ChannelStore.getChannel(value) : value;
                     if (!this.settings.hideUnreads || !this.shouldShow(channel)) return result;
                     if (key === "getGuildChannelUnreadState")
@@ -904,12 +943,12 @@
             });
         }
         patchChannelList(modules) {
-            this.api.Patcher.after(modules.ChannelStore, "getChannel", (_instance, [id], result) => {
+            this.after(modules.ChannelStore, "getChannel", (_instance, [id], result) => {
                 if (typeof id !== "string" || !id.endsWith("_hidden")) return result;
                 const guildId = id.slice(0, -7);
                 return this.extraCategory(modules, guildId, modules.ChannelStore.getMutableGuildChannelsForGuild(guildId)) ?? result;
             });
-            this.api.Patcher.after(modules.ChannelStore, "getMutableGuildChannelsForGuild", (_instance, [guildId], result) => {
+            this.after(modules.ChannelStore, "getMutableGuildChannelsForGuild", (_instance, [guildId], result) => {
                 if (!result) return result;
                 const extra = this.extraCategory(modules, guildId, result);
                 return extra
@@ -920,7 +959,7 @@
                     : result;
             });
             if (modules.GuildChannelStore?.getChannels) {
-                this.api.Patcher.after(modules.GuildChannelStore, "getChannels", (_instance, [guildId], result) => {
+                this.after(modules.GuildChannelStore, "getChannels", (_instance, [guildId], result) => {
                     if (!result) return result;
                     const extra = this.extraCategory(modules, guildId, modules.ChannelStore.getMutableGuildChannelsForGuild(guildId));
                     if (!extra) return result;
@@ -936,7 +975,7 @@
                     };
                 });
             }
-            this.api.Patcher.after(modules.ChannelListStore, "getGuild", (_instance, [guildId], result) => {
+            this.after(modules.ChannelListStore, "getGuild", (_instance, [guildId], result) => {
                 if (!result?.guildChannels || this.settings.blacklistedGuilds[guildId]) return result;
                 if (this.settings.sort === "native" && !this.settings.shouldShowEmptyCategory) return result;
                 const transformed = transformChannelList(
@@ -955,7 +994,7 @@
         }
         patchChannelItem(modules) {
             if (modules.ChannelIcon) {
-                this.api.Patcher.before(modules.ChannelIcon.object, modules.ChannelIcon.key, (_instance, args) => {
+                this.before(modules.ChannelIcon.object, modules.ChannelIcon.key, (_instance, args) => {
                     if (this.shouldShow(args[0]) && args[2]?.locked)
                         args[2] = {
                             ...args[2],
@@ -973,7 +1012,7 @@
                 );
                 return;
             }
-            this.api.Patcher.after(modules.ChannelItem.object, modules.ChannelItem.key, (_instance, [props], result) => {
+            this.after(modules.ChannelItem.object, modules.ChannelItem.key, (_instance, [props], result) => {
                 const channel = props?.channel;
                 if (!channel || !this.shouldShow(channel)) return result;
                 const vocal = channel.type === 2 || channel.type === 13;
