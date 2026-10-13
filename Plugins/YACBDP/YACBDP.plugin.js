@@ -1,7 +1,7 @@
 /**
  * @name YACBDP
  * @displayName YACBDP
- * @version 1.1.2
+ * @version 1.2.0
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/YACBDP
@@ -40,7 +40,7 @@
     }); // ./src/config.json
 
     const config_namespaceObject = /*#__PURE__*/ JSON.parse(
-        '{"rE":"1.1.2","cy":"ItzFlibat","h_":"Shared runtime and plugin dashboard for Yet Another Collection of BetterDiscord Plugins."}'
+        '{"rE":"1.2.0","cy":"ItzFlibat","h_":"Shared runtime and plugin dashboard for Yet Another Collection of BetterDiscord Plugins."}'
     ); // ./src/index.tsx
     const PLUGIN_NAME = "YACBDP";
     const VERSION = config_namespaceObject.rE;
@@ -48,6 +48,7 @@
     const CHECK_INTERVAL = 4 * 60 * 60 * 1000;
     const DEFAULT_SETTINGS = {
         checkForUpdates: true,
+        autoUpdate: true,
         notifyOnUpdate: true,
         notifyOnPluginUpdated: true
     };
@@ -78,7 +79,8 @@
             ...DEFAULT_SETTINGS
         },
         available: {},
-        notified: new Set(),
+        order: [],
+        closeNotice: undefined,
         timer: undefined,
         updateStart: undefined,
         checking: false
@@ -121,6 +123,31 @@
         }
         return result;
     }
+    function syncNotice() {
+        state.closeNotice?.();
+        state.closeNotice = undefined;
+        state.order = state.order.filter(id => state.available[id]);
+        const id = state.order[state.order.length - 1];
+        if (!id || !state.settings.notifyOnUpdate) return;
+        const name = MANAGED_PLUGINS.find(plugin => plugin.id === id)?.name ?? id;
+        const more = state.order.length - 1;
+        const close = BdApi.UI.showNotice(
+            `${name} ${state.available[id]} is available (you have ${installedVersion(id)}).${more ? ` ${more} more update(s) waiting.` : ""}`,
+            {
+                type: "info",
+                buttons: [
+                    {
+                        label: "Update",
+                        onClick: async () => {
+                            await installPlugin(id, true);
+                            syncNotice();
+                        }
+                    }
+                ]
+            }
+        );
+        if (typeof close === "function") state.closeNotice = close;
+    }
     async function checkForUpdates(manual = false) {
         if (state.checking || (!manual && !state.settings.checkForUpdates)) return 0;
         state.checking = true;
@@ -135,25 +162,19 @@
                             delete state.available[plugin.id];
                             return;
                         }
+                        if (state.available[plugin.id] !== latest) state.order = [...state.order.filter(id => id !== plugin.id), plugin.id];
                         state.available[plugin.id] = latest;
-                        const key = `${plugin.id}@${latest}`;
-                        if (state.settings.notifyOnUpdate && !state.notified.has(key)) {
-                            state.notified.add(key);
-                            BdApi.UI.showNotice(`${plugin.name} ${latest} is available (you have ${current}).`, {
-                                type: "info",
-                                buttons: [
-                                    {
-                                        label: "Update",
-                                        onClick: () => void installPlugin(plugin.id, true)
-                                    }
-                                ]
-                            });
-                        }
                     } catch (error) {
                         BdApi.Logger.warn(PLUGIN_NAME, `Unable to check ${plugin.id} for updates.`, error);
                     }
                 })
             );
+            if (state.settings.autoUpdate && !manual) {
+                // The library goes last because replacing its file reloads it.
+                const ids = Object.keys(state.available).sort((a, b) => Number(a === PLUGIN_NAME) - Number(b === PLUGIN_NAME));
+                for (const id of ids) await installPlugin(id, true);
+            }
+            syncNotice();
             if (manual) {
                 const count = Object.keys(state.available).length;
                 BdApi.UI.showToast(count ? `${count} plugin update(s) available.` : "All collection plugins are up to date.", {
@@ -174,6 +195,7 @@
             if (!fs || !path) throw new Error("File access is unavailable.");
             fs.writeFileSync(path.join(BdApi.Plugins.folder, `${id}.plugin.js`), source);
             delete state.available[id];
+            state.order = state.order.filter(item => item !== id);
             BdApi.UI.showToast(`${id} ${update ? "updated" : "installed"}. BetterDiscord will reload it.`, {
                 type: "success"
             });
@@ -290,7 +312,11 @@
                     primary: true,
                     label: "Update",
                     disabled: busy,
-                    onClick: () => void run(() => installPlugin(plugin.id, true))
+                    onClick: () =>
+                        void run(async () => {
+                            await installPlugin(plugin.id, true);
+                            syncNotice();
+                        })
                 }),
             !version
                 ? BdApi.React.createElement(UIButton, {
@@ -384,8 +410,15 @@
                     },
                     {
                         type: "switch",
+                        id: "autoUpdate",
+                        name: "Install updates automatically",
+                        note: "Downloads new versions in the background and reloads the plugin. Turn off to be asked instead.",
+                        value: state.settings.autoUpdate
+                    },
+                    {
+                        type: "switch",
                         id: "notifyOnUpdate",
-                        name: "Show a notice when an update is available",
+                        name: "Show a notice when an update needs approval",
                         value: state.settings.notifyOnUpdate
                     },
                     {
@@ -455,6 +488,7 @@
             };
             BdApi.Data.save(PLUGIN_NAME, "library-settings", state.settings);
             if (id === "checkForUpdates" && value) void checkForUpdates();
+            if (id === "notifyOnUpdate") syncNotice();
         });
     }
     class YACBDP {
@@ -499,6 +533,13 @@
                     },
                     {
                         type: "added",
+                        title: "Automatic updates",
+                        items: [
+                            "Plugin updates install in the background by default. Update notices stack with the newest first and clear once installed."
+                        ]
+                    },
+                    {
+                        type: "added",
                         title: "Update detection",
                         items: ["Plugins now report when they were updated and what changed."]
                     }
@@ -510,6 +551,8 @@
         stop() {
             if (state.updateStart) clearTimeout(state.updateStart);
             if (state.timer) clearInterval(state.timer);
+            state.closeNotice?.();
+            state.closeNotice = undefined;
             state.timer = undefined;
             state.updateStart = undefined;
             if (window.YACBDP?.version === VERSION) delete window.YACBDP;
