@@ -1,7 +1,7 @@
 /**
  * @name BetterDiscordBadges
  * @displayName BetterDiscord Badges
- * @version 1.2.1
+ * @version 1.2.2
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/BetterDiscordBadges
@@ -39,7 +39,7 @@
         default: () => /* binding */ BetterDiscordBadges
     }); // ./src/config.json
 
-    const config_namespaceObject = { rE: "1.2.1" }; // ./src/index.tsx
+    const config_namespaceObject = { rE: "1.2.2" }; // ./src/index.tsx
     const PLUGIN_NAME = "BetterDiscordBadges";
     const API_URL = "https://alliance.flibat.com/api/badges/users";
     const REFRESH_INTERVAL = 30 * 60 * 1000;
@@ -148,7 +148,6 @@
         cache = new Map();
         stopped = false;
         dependencyAttempts = 0;
-        patchAttempts = 0;
         getName() {
             return PLUGIN_NAME;
         }
@@ -198,7 +197,6 @@
                 SERVICES.map(service => [service.id, service.forced ? true : (saved[service.id] ?? service.enabled)])
             );
             BdApi.Data.save(PLUGIN_NAME, "settings", this.settings);
-            this.patchAttempts = 0;
             this.tryProfilePatch();
             void this.loadBadges();
             this.interval = setInterval(() => void this.loadBadges(), REFRESH_INTERVAL);
@@ -206,7 +204,7 @@
         stop() {
             this.stopped = true;
             if (this.dependencyTimer) clearTimeout(this.dependencyTimer);
-            if (this.patchTimer) clearTimeout(this.patchTimer);
+            this.lazyAbort?.abort();
             this.dependencyAttempts = 0;
             this.request?.abort();
             if (this.interval) clearInterval(this.interval);
@@ -254,36 +252,52 @@
                       onChange
                   });
         }
+        isBadgeList(value) {
+            if (typeof value !== "function") return false;
+            try {
+                const code = Function.prototype.toString.call(value);
+                return (
+                    code.includes("UserProfileBadgeListRows") || (code.includes("pendingBadges") && code.includes("showPendingBadgeEdits"))
+                );
+            } catch {
+                return false;
+            }
+        }
         tryProfilePatch() {
             if (this.stopped || this.patch) return;
-            if (this.installProfilePatch()) return;
-            if (this.patchAttempts++ < 10) {
-                this.patchTimer = setTimeout(() => this.tryProfilePatch(), 3000);
-                return;
-            }
-            BdApi.Logger.error(
-                PLUGIN_NAME,
-                "Could not find Discord's profile badge renderer. Badges will not appear until Discord updates."
-            );
-            BdApi.UI.showToast("BetterDiscord Badges could not find the profile badge area.", {
-                type: "error"
-            });
-        }
-        installProfilePatch() {
-            // Discord compiles intl keys to hashes, so match the profile badge list by its component name instead.
-            const filter = value => {
-                if (typeof value !== "function") return false;
-                try {
-                    return Function.prototype.toString.call(value).includes("UserProfileBadgeListRows");
-                } catch {
-                    return false;
-                }
-            };
-            const pair = BdApi.Webpack.getWithKey(filter, {
+            const pair = BdApi.Webpack.getWithKey(value => this.isBadgeList(value), {
                 searchExports: true
             });
-            if (!pair || !pair[0] || !pair[1]) return false;
-            const [module, key] = pair;
+            if (pair?.[0] && pair[1]) {
+                this.applyProfilePatch(pair[0], pair[1]);
+                return;
+            }
+            // Discord only loads the profile badge module the first time a profile renders, so wait for it.
+            const wait = BdApi.Webpack.waitForModule ?? BdApi.Webpack.getLazy;
+            if (typeof wait !== "function") {
+                BdApi.Logger.error(PLUGIN_NAME, "This BetterDiscord version cannot wait for Discord modules. Update BetterDiscord.");
+                BdApi.UI.showToast("BetterDiscord Badges needs a newer BetterDiscord version.", {
+                    type: "error"
+                });
+                return;
+            }
+            this.lazyAbort = new AbortController();
+            wait.call(
+                BdApi.Webpack,
+                exports => exports && typeof exports === "object" && Object.keys(exports).some(key => this.isBadgeList(exports[key])),
+                {
+                    defaultExport: false,
+                    signal: this.lazyAbort.signal
+                }
+            )
+                .then(exports => {
+                    if (!exports || this.stopped || this.patch) return;
+                    const key = Object.keys(exports).find(name => this.isBadgeList(exports[name]));
+                    if (key) this.applyProfilePatch(exports, key);
+                })
+                .catch(error => BdApi.Logger.warn(PLUGIN_NAME, "Stopped waiting for the profile badge renderer.", error));
+        }
+        applyProfilePatch(module, key) {
             // The list merges `pendingBadges` into the badges it renders, which lets us add ours without touching its markup.
             this.patch = BdApi.Patcher.before(PLUGIN_NAME, module, key, (_, args) => {
                 const props = args[0];
@@ -296,7 +310,6 @@
                     pendingBadges: [...(props.pendingBadges ?? []), ...badges]
                 };
             });
-            return true;
         }
         async loadBadges() {
             this.request?.abort();
