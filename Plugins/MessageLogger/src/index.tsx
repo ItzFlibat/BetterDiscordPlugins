@@ -53,6 +53,7 @@ export default class MessageLogger {
     private unpatches: Array<() => void> = [];
     private dependencyTimer: ReturnType<typeof setTimeout> | undefined;
     private dependencyAttempts = 0;
+    private saveTimer: ReturnType<typeof setTimeout> | undefined;
 
     getName() {
         return PLUGIN_NAME;
@@ -113,6 +114,7 @@ export default class MessageLogger {
     stop() {
         if (this.dependencyTimer) clearTimeout(this.dependencyTimer);
         this.dependencyAttempts = 0;
+        if (this.saveTimer) this.flush();
         BdApi.Patcher.unpatchAll(PLUGIN_NAME);
         for (const unpatch of this.unpatches.splice(0)) unpatch();
     }
@@ -224,18 +226,16 @@ export default class MessageLogger {
 
     private onUpdate(event: any) {
         const updated = event.message;
-        if (!updated?.id) return;
+        if (!updated?.id || typeof updated.content !== "string") return;
         const channelId = String(updated.channel_id ?? updated.channelId ?? "");
-        const messageId = String(updated.id);
-        const cached = this.messageStore.getMessage(channelId, messageId);
-        const oldEntry = this.logs.filter(entry => entry.message.id === messageId && entry.message.channelId === channelId).at(-1);
-        const nextContent = typeof updated.content === "string" ? updated.content : String(cached?.content ?? "");
-        if (!channelId || !cached || this.isEphemeral(cached) || !this.shouldLog(cached, channelId)) return;
-        if (!oldEntry || oldEntry.kind !== "edit" || oldEntry.message.content === nextContent) return;
+        const cached = channelId ? this.messageStore.getMessage(channelId, String(updated.id)) : undefined;
+        if (!cached || this.isEphemeral(cached) || !this.shouldLog(cached, channelId)) return;
+        const previous = String(cached.content ?? "");
+        if (previous === updated.content) return;
         this.add({
             kind: "edit",
-            message: { ...this.snapshot(cached, channelId), content: nextContent },
-            previousContent: oldEntry.message.content,
+            message: { ...this.snapshot(cached, channelId), content: updated.content },
+            previousContent: previous,
             occurredAt: new Date().toISOString()
         });
     }
@@ -275,6 +275,16 @@ export default class MessageLogger {
     private add(entry: LogEntry) {
         this.logs.push(entry);
         this.prune();
+    }
+
+    private scheduleSave() {
+        if (this.saveTimer) return;
+        this.saveTimer = setTimeout(() => this.flush(), 2000);
+    }
+
+    private flush() {
+        if (this.saveTimer) clearTimeout(this.saveTimer);
+        this.saveTimer = undefined;
         BdApi.Data.save(PLUGIN_NAME, LOG_KEY, this.logs);
     }
 
@@ -286,7 +296,7 @@ export default class MessageLogger {
         }
         const maximum = Math.max(100, Number(this.settings.maxEntries) || DEFAULT_SETTINGS.maxEntries);
         if (this.logs.length > maximum) this.logs = this.logs.slice(-maximum);
-        BdApi.Data.save(PLUGIN_NAME, LOG_KEY, this.logs);
+        this.scheduleSave();
     }
 
     private ids(value: string) {
@@ -307,21 +317,18 @@ export default class MessageLogger {
                     const children = tree?.props?.children;
                     if (!Array.isArray(children)) return;
                     children.push(
-                        BdApi.React.createElement(BdApi.ContextMenu.Item, {
+                        BdApi.ContextMenu.buildItem({
+                            type: "submenu",
                             id: MENU_ID,
-                            label: "View Message Log",
-                            action: () => this.openLog(channelId, props.channel?.name ?? "Channel"),
-                            children: [
-                                BdApi.React.createElement(BdApi.ContextMenu.Item, {
-                                    id: `${MENU_ID}-export`,
-                                    label: "Export as JSON",
-                                    action: () => this.exportChannel(channelId)
-                                }),
-                                BdApi.React.createElement(BdApi.ContextMenu.Item, {
-                                    id: `${MENU_ID}-clear`,
-                                    label: "Clear Channel Log",
-                                    action: () => this.confirmClear(channelId)
-                                })
+                            label: "Message Log",
+                            items: [
+                                {
+                                    id: `${MENU_ID}-view`,
+                                    label: "View",
+                                    action: () => this.openLog(channelId, props.channel?.name ?? "Channel")
+                                },
+                                { id: `${MENU_ID}-export`, label: "Export as JSON", action: () => this.exportChannel(channelId) },
+                                { id: `${MENU_ID}-clear`, label: "Clear", color: "danger", action: () => this.confirmClear(channelId) }
                             ]
                         })
                     );
@@ -346,7 +353,7 @@ export default class MessageLogger {
                 {entries.map((entry, index) => (
                     <article
                         key={`${entry.message.id}-${entry.occurredAt}-${index}`}
-                        style={{ borderBottom: "1px solid var(--background-modifier-accent)", padding: "10px 0" }}
+                        style={{ borderBottom: "1px solid var(--border-subtle, var(--background-modifier-accent))", padding: "10px 0" }}
                     >
                         <strong>
                             {entry.kind === "delete" ? "Deleted" : "Edited"} · {entry.message.authorName}
@@ -376,7 +383,7 @@ export default class MessageLogger {
 
     private clearChannel(channelId: string) {
         this.logs = this.logs.filter(entry => entry.message.channelId !== channelId);
-        BdApi.Data.save(PLUGIN_NAME, LOG_KEY, this.logs);
+        this.flush();
         BdApi.UI.showToast("Channel log cleared.", { type: "success" });
     }
 

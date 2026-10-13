@@ -1,7 +1,7 @@
 /**
  * @name MessageLogger
  * @displayName Message Logger
- * @version 1.2.0
+ * @version 1.2.1
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/MessageLogger
@@ -39,7 +39,7 @@
         default: () => /* binding */ MessageLogger
     }); // ./src/config.json
 
-    const config_namespaceObject = { rE: "1.2.0" }; // ./src/index.tsx
+    const config_namespaceObject = { rE: "1.2.1" }; // ./src/index.tsx
     const DEFAULT_SETTINGS = {
         logDeletes: true,
         logEdits: true,
@@ -130,6 +130,7 @@
         stop() {
             if (this.dependencyTimer) clearTimeout(this.dependencyTimer);
             this.dependencyAttempts = 0;
+            if (this.saveTimer) this.flush();
             BdApi.Patcher.unpatchAll(PLUGIN_NAME);
             for (const unpatch of this.unpatches.splice(0)) unpatch();
         }
@@ -251,21 +252,19 @@
         }
         onUpdate(event) {
             const updated = event.message;
-            if (!updated?.id) return;
+            if (!updated?.id || typeof updated.content !== "string") return;
             const channelId = String(updated.channel_id ?? updated.channelId ?? "");
-            const messageId = String(updated.id);
-            const cached = this.messageStore.getMessage(channelId, messageId);
-            const oldEntry = this.logs.filter(entry => entry.message.id === messageId && entry.message.channelId === channelId).at(-1);
-            const nextContent = typeof updated.content === "string" ? updated.content : String(cached?.content ?? "");
-            if (!channelId || !cached || this.isEphemeral(cached) || !this.shouldLog(cached, channelId)) return;
-            if (!oldEntry || oldEntry.kind !== "edit" || oldEntry.message.content === nextContent) return;
+            const cached = channelId ? this.messageStore.getMessage(channelId, String(updated.id)) : undefined;
+            if (!cached || this.isEphemeral(cached) || !this.shouldLog(cached, channelId)) return;
+            const previous = String(cached.content ?? "");
+            if (previous === updated.content) return;
             this.add({
                 kind: "edit",
                 message: {
                     ...this.snapshot(cached, channelId),
-                    content: nextContent
+                    content: updated.content
                 },
-                previousContent: oldEntry.message.content,
+                previousContent: previous,
                 occurredAt: new Date().toISOString()
             });
         }
@@ -304,6 +303,14 @@
         add(entry) {
             this.logs.push(entry);
             this.prune();
+        }
+        scheduleSave() {
+            if (this.saveTimer) return;
+            this.saveTimer = setTimeout(() => this.flush(), 2000);
+        }
+        flush() {
+            if (this.saveTimer) clearTimeout(this.saveTimer);
+            this.saveTimer = undefined;
             BdApi.Data.save(PLUGIN_NAME, LOG_KEY, this.logs);
         }
         prune() {
@@ -314,7 +321,7 @@
             }
             const maximum = Math.max(100, Number(this.settings.maxEntries) || DEFAULT_SETTINGS.maxEntries);
             if (this.logs.length > maximum) this.logs = this.logs.slice(-maximum);
-            BdApi.Data.save(PLUGIN_NAME, LOG_KEY, this.logs);
+            this.scheduleSave();
         }
         ids(value) {
             return new Set(
@@ -333,21 +340,27 @@
                         const children = tree?.props?.children;
                         if (!Array.isArray(children)) return;
                         children.push(
-                            BdApi.React.createElement(BdApi.ContextMenu.Item, {
+                            BdApi.ContextMenu.buildItem({
+                                type: "submenu",
                                 id: MENU_ID,
-                                label: "View Message Log",
-                                action: () => this.openLog(channelId, props.channel?.name ?? "Channel"),
-                                children: [
-                                    BdApi.React.createElement(BdApi.ContextMenu.Item, {
+                                label: "Message Log",
+                                items: [
+                                    {
+                                        id: `${MENU_ID}-view`,
+                                        label: "View",
+                                        action: () => this.openLog(channelId, props.channel?.name ?? "Channel")
+                                    },
+                                    {
                                         id: `${MENU_ID}-export`,
                                         label: "Export as JSON",
                                         action: () => this.exportChannel(channelId)
-                                    }),
-                                    BdApi.React.createElement(BdApi.ContextMenu.Item, {
+                                    },
+                                    {
                                         id: `${MENU_ID}-clear`,
-                                        label: "Clear Channel Log",
+                                        label: "Clear",
+                                        color: "danger",
                                         action: () => this.confirmClear(channelId)
-                                    })
+                                    }
                                 ]
                             })
                         );
@@ -380,7 +393,7 @@
                         {
                             key: `${entry.message.id}-${entry.occurredAt}-${index}`,
                             style: {
-                                borderBottom: "1px solid var(--background-modifier-accent)",
+                                borderBottom: "1px solid var(--border-subtle, var(--background-modifier-accent))",
                                 padding: "10px 0"
                             }
                         },
@@ -445,7 +458,7 @@
         }
         clearChannel(channelId) {
             this.logs = this.logs.filter(entry => entry.message.channelId !== channelId);
-            BdApi.Data.save(PLUGIN_NAME, LOG_KEY, this.logs);
+            this.flush();
             BdApi.UI.showToast("Channel log cleared.", {
                 type: "success"
             });
