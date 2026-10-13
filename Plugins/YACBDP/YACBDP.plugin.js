@@ -1,7 +1,7 @@
 /**
  * @name YACBDP
  * @displayName YACBDP
- * @version 1.1.1
+ * @version 1.1.2
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/YACBDP
@@ -40,7 +40,7 @@
     }); // ./src/config.json
 
     const config_namespaceObject = /*#__PURE__*/ JSON.parse(
-        '{"rE":"1.1.1","cy":"ItzFlibat","h_":"Shared runtime and plugin dashboard for Yet Another Collection of BetterDiscord Plugins."}'
+        '{"rE":"1.1.2","cy":"ItzFlibat","h_":"Shared runtime and plugin dashboard for Yet Another Collection of BetterDiscord Plugins."}'
     ); // ./src/index.tsx
     const PLUGIN_NAME = "YACBDP";
     const VERSION = config_namespaceObject.rE;
@@ -275,8 +275,6 @@
                 refresh();
             }
         };
-        const Text = BdApi.Components?.Text;
-        const label = text => (Text ? BdApi.React.createElement(Text, null, text) : BdApi.React.createElement("span", null, text));
         return BdApi.React.createElement(
             "div",
             {
@@ -284,21 +282,9 @@
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
-                    width: "100%",
                     justifyContent: "flex-end"
                 }
             },
-            BdApi.React.createElement(
-                "div",
-                {
-                    style: {
-                        flex: 1,
-                        opacity: 0.8
-                    }
-                },
-                label(version ? `Installed: v${version}` : "Not installed"),
-                latest && label(`Available: v${latest}`)
-            ),
             latest &&
                 BdApi.React.createElement(UIButton, {
                     primary: true,
@@ -322,6 +308,28 @@
                           refresh();
                       }
                   })
+        );
+    }
+    function PluginName(props) {
+        useTicker();
+        const version = installedVersion(props.plugin.id);
+        const latest = state.available[props.plugin.id];
+        return BdApi.React.createElement(
+            "div",
+            null,
+            BdApi.React.createElement("div", null, props.plugin.name),
+            BdApi.React.createElement(
+                "div",
+                {
+                    style: {
+                        fontSize: 12,
+                        fontWeight: 400,
+                        opacity: 0.7
+                    }
+                },
+                version ? `v${version}` : "Not installed",
+                latest ? ` (v${latest} available)` : ""
+            )
         );
     }
     function UpdateRow() {
@@ -351,7 +359,9 @@
                     ...MANAGED_PLUGINS.map(plugin => ({
                         type: "custom",
                         id: `plugin-${plugin.id}`,
-                        name: plugin.name,
+                        name: BdApi.React.createElement(PluginName, {
+                            plugin: plugin
+                        }),
                         note: plugin.description,
                         inline: true,
                         children: BdApi.React.createElement(PluginRow, {

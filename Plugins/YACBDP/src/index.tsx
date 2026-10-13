@@ -225,14 +225,8 @@ function PluginRow(props: { plugin: ManagedPlugin }) {
             refresh();
         }
     };
-    const Text = BdApi.Components?.Text;
-    const label = (text: string) => (Text ? <Text>{text}</Text> : <span>{text}</span>);
     return (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", justifyContent: "flex-end" }}>
-            <div style={{ flex: 1, opacity: 0.8 }}>
-                {label(version ? `Installed: v${version}` : "Not installed")}
-                {latest && label(`Available: v${latest}`)}
-            </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
             {latest && <UIButton primary label="Update" disabled={busy} onClick={() => void run(() => installPlugin(plugin.id, true))} />}
             {!version ? (
                 <UIButton primary label="Install" disabled={busy} onClick={() => void run(() => installPlugin(plugin.id, false))} />
@@ -247,6 +241,21 @@ function PluginRow(props: { plugin: ManagedPlugin }) {
                     }}
                 />
             )}
+        </div>
+    );
+}
+
+function PluginName(props: { plugin: ManagedPlugin }) {
+    useTicker();
+    const version = installedVersion(props.plugin.id);
+    const latest = state.available[props.plugin.id];
+    return (
+        <div>
+            <div>{props.plugin.name}</div>
+            <div style={{ fontSize: 12, fontWeight: 400, opacity: 0.7 }}>
+                {version ? `v${version}` : "Not installed"}
+                {latest ? ` (v${latest} available)` : ""}
+            </div>
         </div>
     );
 }
@@ -281,7 +290,7 @@ function buildDashboard() {
                 ...MANAGED_PLUGINS.map(plugin => ({
                     type: "custom",
                     id: `plugin-${plugin.id}`,
-                    name: plugin.name,
+                    name: <PluginName plugin={plugin} />,
                     note: plugin.description,
                     inline: true,
                     children: <PluginRow plugin={plugin} />
