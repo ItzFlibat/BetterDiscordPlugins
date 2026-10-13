@@ -105,6 +105,20 @@ export default class ShowHiddenChannels {
     }
 
     private failures = new Set<string>();
+    private cacheVersion = 0;
+    private caches = new Map<string, WeakMap<object, { key: string; value: any }>>();
+
+    // Discord compares these results by reference, so returning a fresh copy on every call resets the channel list's scroll position.
+    private memo<T extends object>(name: string, source: T, key: string, build: () => T): T {
+        let cache = this.caches.get(name);
+        if (!cache) this.caches.set(name, (cache = new WeakMap()));
+        const full = `${this.cacheVersion}:${key}`;
+        const hit = cache.get(source);
+        if (hit?.key === full) return hit.value;
+        const value = build();
+        cache.set(source, { key: full, value });
+        return value;
+    }
 
     private report(key: unknown, error: unknown): void {
         const name = String(key);
@@ -257,7 +271,8 @@ export default class ShowHiddenChannels {
             (_instance: unknown, [guildId]: [string], result: Record<string, Channel>) => {
                 if (!result) return result;
                 const extra = this.extraCategory(modules, guildId, result);
-                return extra ? { ...result, [extra.id]: extra } : result;
+                if (!extra) return result;
+                return this.memo("channels", result, guildId, () => ({ ...result, [extra.id]: extra }));
             }
         );
         if (modules.GuildChannelStore?.getChannels) {
@@ -268,28 +283,31 @@ export default class ShowHiddenChannels {
                     if (!result) return result;
                     const extra = this.extraCategory(modules, guildId, modules.ChannelStore.getMutableGuildChannelsForGuild(guildId));
                     if (!extra) return result;
-                    return {
+                    return this.memo("guildChannels", result, guildId, () => ({
                         ...result,
                         4: [...(result[4] ?? []).filter(row => row.channel.id !== extra.id), { channel: extra, comparator: extra.position }]
-                    };
+                    }));
                 }
             );
         }
         this.after(modules.ChannelListStore, "getGuild", (_instance: unknown, [guildId]: [string], result: GuildList) => {
             if (!result?.guildChannels || this.settings.blacklistedGuilds[guildId]) return result;
             if (this.settings.sort === "native" && !this.settings.shouldShowEmptyCategory) return result;
-            const transformed = transformChannelList(
-                result,
-                this.settings,
-                channel => channel.type !== 4 && this.shouldShow(channel),
-                `${guildId}_hidden`
-            );
-            const extra = transformed.guildChannels.categories[`${guildId}_hidden`];
-            if (extra && modules.CategoryStore?.isCollapsed(extra.id)) {
-                extra.isCollapsed = true;
-                extra.shownChannelIds = [];
-            }
-            return transformed;
+            const extraId = `${guildId}_hidden`;
+            return this.memo("list", result, `${guildId}:${modules.CategoryStore?.isCollapsed(extraId)}`, () => {
+                const transformed = transformChannelList(
+                    result,
+                    this.settings,
+                    channel => channel.type !== 4 && this.shouldShow(channel),
+                    extraId
+                );
+                const extra = transformed.guildChannels.categories[extraId];
+                if (extra && modules.CategoryStore?.isCollapsed(extra.id)) {
+                    extra.isCollapsed = true;
+                    extra.shownChannelIds = [];
+                }
+                return transformed;
+            });
         });
     }
 
@@ -426,6 +444,7 @@ export default class ShowHiddenChannels {
 
     private saveSettings(): void {
         this.settings = loadSettings(this.settings);
+        this.cacheVersion++;
         this.api.Data.save("settings", this.settings);
         if (this.modules) refreshChannels(this.modules);
     }

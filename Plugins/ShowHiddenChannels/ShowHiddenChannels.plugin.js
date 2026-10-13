@@ -1,7 +1,7 @@
 /**
  * @name ShowHiddenChannels
  * @displayName Show Hidden Channels
- * @version 2.2.4
+ * @version 2.2.5
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/ShowHiddenChannels
@@ -488,7 +488,7 @@
             )
         );
     } // ./src/config.json
-    const config_namespaceObject = /*#__PURE__*/ JSON.parse('{"UU":"ShowHiddenChannels","rE":"2.2.4"}'); // ./src/styles.ts
+    const config_namespaceObject = /*#__PURE__*/ JSON.parse('{"UU":"ShowHiddenChannels","rE":"2.2.5"}'); // ./src/styles.ts
     /*
      * BetterDiscordPlugins
      * Copyright (c) 2026 ItzFlibat
@@ -542,7 +542,7 @@
             ...list.collapsedCategoryIds
         };
         const categories = [];
-        function cloneCategory(category) {
+        function cloneCategory(category, real = false) {
             const clone = copy(category);
             clone.channels = Object.fromEntries(
                 Object.entries(category.channels ?? {}).map(([id, row]) => [
@@ -558,11 +558,12 @@
             clone.shownChannelIds = ids(anyCategory.getShownChannelIds?.() ?? category.shownChannelIds);
             const hidden = anyCategory.getHiddenChannelIds?.() ?? category.hiddenChannelIds;
             clone.hiddenChannelIds = hidden && ids(hidden);
-            if (settings.shouldShowEmptyCategory) clone.shouldShowEmptyCategory = () => true;
+            // Only real categories are forced open; pinned, suggested and uncategorized sections must stay empty when they are.
+            if (real && settings.shouldShowEmptyCategory) clone.shouldShowEmptyCategory = () => true;
             categories.push(clone);
             return clone;
         }
-        for (const [id, category] of Object.entries(list.categories)) list.categories[id] = cloneCategory(category);
+        for (const [id, category] of Object.entries(list.categories)) list.categories[id] = cloneCategory(category, true);
         for (const key of ["favoritesCategory", "recentsCategory", "noParentCategory", "voiceChannelsCategory"]) {
             if (list[key]) list[key] = cloneCategory(list[key]);
         }
@@ -803,6 +804,23 @@
             this.originalCan = undefined;
         }
         failures = new Set();
+        cacheVersion = 0;
+        caches = new Map();
+
+        // Discord compares these results by reference, so returning a fresh copy on every call resets the channel list's scroll position.
+        memo(name, source, key, build) {
+            let cache = this.caches.get(name);
+            if (!cache) this.caches.set(name, (cache = new WeakMap()));
+            const full = `${this.cacheVersion}:${key}`;
+            const hit = cache.get(source);
+            if (hit?.key === full) return hit.value;
+            const value = build();
+            cache.set(source, {
+                key: full,
+                value
+            });
+            return value;
+        }
         report(key, error) {
             const name = String(key);
             if (this.failures.has(name)) return;
@@ -957,19 +975,18 @@
             this.after(modules.ChannelStore, "getMutableGuildChannelsForGuild", (_instance, [guildId], result) => {
                 if (!result) return result;
                 const extra = this.extraCategory(modules, guildId, result);
-                return extra
-                    ? {
-                          ...result,
-                          [extra.id]: extra
-                      }
-                    : result;
+                if (!extra) return result;
+                return this.memo("channels", result, guildId, () => ({
+                    ...result,
+                    [extra.id]: extra
+                }));
             });
             if (modules.GuildChannelStore?.getChannels) {
                 this.after(modules.GuildChannelStore, "getChannels", (_instance, [guildId], result) => {
                     if (!result) return result;
                     const extra = this.extraCategory(modules, guildId, modules.ChannelStore.getMutableGuildChannelsForGuild(guildId));
                     if (!extra) return result;
-                    return {
+                    return this.memo("guildChannels", result, guildId, () => ({
                         ...result,
                         4: [
                             ...(result[4] ?? []).filter(row => row.channel.id !== extra.id),
@@ -978,24 +995,27 @@
                                 comparator: extra.position
                             }
                         ]
-                    };
+                    }));
                 });
             }
             this.after(modules.ChannelListStore, "getGuild", (_instance, [guildId], result) => {
                 if (!result?.guildChannels || this.settings.blacklistedGuilds[guildId]) return result;
                 if (this.settings.sort === "native" && !this.settings.shouldShowEmptyCategory) return result;
-                const transformed = transformChannelList(
-                    result,
-                    this.settings,
-                    channel => channel.type !== 4 && this.shouldShow(channel),
-                    `${guildId}_hidden`
-                );
-                const extra = transformed.guildChannels.categories[`${guildId}_hidden`];
-                if (extra && modules.CategoryStore?.isCollapsed(extra.id)) {
-                    extra.isCollapsed = true;
-                    extra.shownChannelIds = [];
-                }
-                return transformed;
+                const extraId = `${guildId}_hidden`;
+                return this.memo("list", result, `${guildId}:${modules.CategoryStore?.isCollapsed(extraId)}`, () => {
+                    const transformed = transformChannelList(
+                        result,
+                        this.settings,
+                        channel => channel.type !== 4 && this.shouldShow(channel),
+                        extraId
+                    );
+                    const extra = transformed.guildChannels.categories[extraId];
+                    if (extra && modules.CategoryStore?.isCollapsed(extra.id)) {
+                        extra.isCollapsed = true;
+                        extra.shownChannelIds = [];
+                    }
+                    return transformed;
+                });
             });
         }
         patchChannelItem(modules) {
@@ -1147,6 +1167,7 @@
         }
         saveSettings() {
             this.settings = loadSettings(this.settings);
+            this.cacheVersion++;
             this.api.Data.save("settings", this.settings);
             if (this.modules) refreshChannels(this.modules);
         }

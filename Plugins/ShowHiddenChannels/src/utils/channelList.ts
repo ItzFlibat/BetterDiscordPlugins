@@ -26,7 +26,7 @@ export function transformChannelList(
     list.collapsedCategoryIds = { ...list.collapsedCategoryIds };
     const categories: Category[] = [];
 
-    function cloneCategory(category: Category): Category {
+    function cloneCategory(category: Category, real = false): Category {
         const clone = copy(category);
         clone.channels = Object.fromEntries(
             Object.entries(category.channels ?? {}).map(([id, row]) => [id, { ...copy(row), category: clone }])
@@ -36,12 +36,13 @@ export function transformChannelList(
         clone.shownChannelIds = ids(anyCategory.getShownChannelIds?.() ?? category.shownChannelIds);
         const hidden = anyCategory.getHiddenChannelIds?.() ?? category.hiddenChannelIds;
         clone.hiddenChannelIds = hidden && ids(hidden);
-        if (settings.shouldShowEmptyCategory) clone.shouldShowEmptyCategory = () => true;
+        // Only real categories are forced open; pinned, suggested and uncategorized sections must stay empty when they are.
+        if (real && settings.shouldShowEmptyCategory) clone.shouldShowEmptyCategory = () => true;
         categories.push(clone);
         return clone;
     }
 
-    for (const [id, category] of Object.entries(list.categories)) list.categories[id] = cloneCategory(category);
+    for (const [id, category] of Object.entries(list.categories)) list.categories[id] = cloneCategory(category, true);
     for (const key of ["favoritesCategory", "recentsCategory", "noParentCategory", "voiceChannelsCategory"] as const) {
         if (list[key]) list[key] = cloneCategory(list[key]);
     }
