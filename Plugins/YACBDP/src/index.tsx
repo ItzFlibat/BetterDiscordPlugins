@@ -19,7 +19,6 @@ interface RegisterOptions {
 }
 
 type SettingsCategory = { id: string; name: string; settings: any[]; shown?: boolean; collapsible?: boolean };
-type DashboardState = { tab: string; refresh: number; busy: Record<string, boolean> };
 type LibrarySettings = { checkForUpdates: boolean; notifyOnUpdate: boolean; notifyOnPluginUpdated: boolean };
 
 const PLUGIN_NAME = "YACBDP";
@@ -179,203 +178,175 @@ function buildPanel(categories: SettingsCategory[], onChange: (category: string,
     });
 }
 
-class PluginDashboard extends BdApi.React.Component<any, DashboardState> {
-    private timer: ReturnType<typeof setInterval>;
+function useTicker() {
+    const [, setTick] = BdApi.React.useState(0);
+    BdApi.React.useEffect(() => {
+        const timer = setInterval(() => setTick((tick: number) => tick + 1), 1500);
+        return () => clearInterval(timer);
+    }, []);
+    return () => setTick((tick: number) => tick + 1);
+}
 
-    constructor(props: any) {
-        super(props);
-        this.state = { tab: "plugins", refresh: 0, busy: {} };
-        this.timer = setInterval(() => this.setState((current: DashboardState) => ({ refresh: current.refresh + 1 })), 1500);
+function UIButton(props: { label: string; onClick: () => void; disabled?: boolean; primary?: boolean }) {
+    const Button = BdApi.Components?.Button;
+    if (!Button) {
+        return (
+            <button disabled={props.disabled} onClick={props.onClick}>
+                {props.label}
+            </button>
+        );
     }
+    return (
+        <Button
+            color={props.primary ? Button.Colors?.BRAND : Button.Colors?.PRIMARY}
+            size={Button.Sizes?.SMALL}
+            disabled={props.disabled}
+            onClick={props.onClick}
+        >
+            {props.label}
+        </Button>
+    );
+}
 
-    componentWillUnmount() {
-        clearInterval(this.timer);
-    }
-
-    private async run(id: string, action: () => Promise<unknown>) {
-        this.setState((current: DashboardState) => ({ busy: { ...current.busy, [id]: true } }));
+function PluginRow(props: { plugin: ManagedPlugin }) {
+    const refresh = useTicker();
+    const [busy, setBusy] = BdApi.React.useState(false);
+    const { plugin } = props;
+    const version = installedVersion(plugin.id);
+    const enabled = Boolean(version && BdApi.Plugins.isEnabled(plugin.id));
+    const isLibrary = plugin.id === PLUGIN_NAME;
+    const latest = state.available[plugin.id];
+    const run = async (action: () => Promise<unknown>) => {
+        setBusy(true);
         try {
             await action();
         } finally {
-            this.setState((current: DashboardState) => ({ busy: { ...current.busy, [id]: false }, refresh: current.refresh + 1 }));
+            setBusy(false);
+            refresh();
         }
-    }
+    };
+    const Text = BdApi.Components?.Text;
+    const label = (text: string) => (Text ? <Text>{text}</Text> : <span>{text}</span>);
+    return (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", justifyContent: "flex-end" }}>
+            <div style={{ flex: 1, opacity: 0.8 }}>
+                {label(version ? `Installed: v${version}` : "Not installed")}
+                {latest && label(`Available: v${latest}`)}
+            </div>
+            {latest && <UIButton primary label="Update" disabled={busy} onClick={() => void run(() => installPlugin(plugin.id, true))} />}
+            {!version ? (
+                <UIButton primary label="Install" disabled={busy} onClick={() => void run(() => installPlugin(plugin.id, false))} />
+            ) : (
+                <UIButton
+                    label={isLibrary ? "Required" : enabled ? "Disable" : "Enable"}
+                    disabled={isLibrary}
+                    onClick={() => {
+                        if (enabled) BdApi.Plugins.disable(plugin.id);
+                        else BdApi.Plugins.enable(plugin.id);
+                        refresh();
+                    }}
+                />
+            )}
+        </div>
+    );
+}
 
-    private renderPlugin(plugin: ManagedPlugin) {
-        const version = installedVersion(plugin.id);
-        const installed = Boolean(version);
-        const enabled = Boolean(installed && BdApi.Plugins.isEnabled(plugin.id));
-        const isLibrary = plugin.id === PLUGIN_NAME;
-        const latest = state.available[plugin.id];
-        const busy = Boolean(this.state.busy[plugin.id]);
-        return (
-            <article
-                key={plugin.id}
-                style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 16,
-                    padding: 16,
-                    margin: "12px 0",
-                    borderRadius: 8,
-                    background: "var(--background-secondary)"
-                }}
-            >
-                <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 16 }}>
-                        {plugin.name} {version && <small style={{ opacity: 0.65 }}>v{version}</small>}
-                        {latest && <small style={{ marginLeft: 8, color: "var(--text-positive)" }}>v{latest} available</small>}
-                    </div>
-                    <div style={{ opacity: 0.8, marginTop: 5 }}>{plugin.description}</div>
-                    <div style={{ marginTop: 8 }}>
-                        <a
-                            href={`https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/${plugin.id}`}
-                            target="_blank"
-                            rel="noreferrer"
-                        >
-                            Source
-                        </a>
-                    </div>
-                </div>
-                {latest && (
-                    <button
-                        disabled={busy}
-                        onClick={() => void this.run(plugin.id, () => installPlugin(plugin.id, true))}
-                        style={{ minWidth: 90 }}
-                    >
-                        Update
-                    </button>
-                )}
-                {!installed ? (
-                    <button
-                        disabled={busy}
-                        onClick={() => void this.run(plugin.id, () => installPlugin(plugin.id, false))}
-                        style={{ minWidth: 110 }}
-                    >
-                        Install
-                    </button>
-                ) : (
-                    <button
-                        disabled={isLibrary}
-                        onClick={() => {
-                            if (enabled) BdApi.Plugins.disable(plugin.id);
-                            else BdApi.Plugins.enable(plugin.id);
-                            this.setState((current: DashboardState) => ({ refresh: current.refresh + 1 }));
-                        }}
-                        style={{ minWidth: 110 }}
-                    >
-                        {isLibrary ? "Required" : enabled ? "Disable" : "Enable"}
-                    </button>
-                )}
-            </article>
-        );
-    }
+function UpdateRow() {
+    useTicker();
+    return (
+        <UIButton
+            primary
+            label={state.checking ? "Checking..." : "Check for updates"}
+            disabled={state.checking}
+            onClick={() => void checkForUpdates(true)}
+        />
+    );
+}
 
-    private renderSettings() {
-        const categories: SettingsCategory[] = [
-            {
-                id: "updates",
-                name: "Updates",
-                shown: true,
-                settings: [
-                    {
-                        type: "switch",
-                        id: "checkForUpdates",
-                        name: "Check for plugin updates",
-                        note: "Checks GitHub every few hours for newer versions of the collection plugins.",
-                        value: state.settings.checkForUpdates
-                    },
-                    {
-                        type: "switch",
-                        id: "notifyOnUpdate",
-                        name: "Show a notice when an update is available",
-                        value: state.settings.notifyOnUpdate
-                    },
-                    {
-                        type: "switch",
-                        id: "notifyOnPluginUpdated",
-                        name: "Show what changed after a plugin updates",
-                        value: state.settings.notifyOnPluginUpdated
-                    }
-                ]
-            }
-        ];
-        return buildPanel(categories, (_category, id, value) => {
-            if (!(id in DEFAULT_SETTINGS)) return;
-            state.settings = { ...state.settings, [id]: Boolean(value) };
-            BdApi.Data.save(PLUGIN_NAME, "library-settings", state.settings);
-            if (id === "checkForUpdates" && value) void checkForUpdates();
-        });
-    }
-
-    render() {
-        return (
-            <main style={{ maxWidth: 900, padding: 24, color: "var(--text-normal)" }}>
-                <header style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-                    <img
-                        src="https://github.com/ItzFlibat.png"
-                        alt="ItzFlibat GitHub profile"
-                        style={{ width: 64, height: 64, borderRadius: "50%" }}
-                    />
-                    <div>
-                        <h1 style={{ margin: 0 }}>YACBDP</h1>
-                        <a href="https://github.com/ItzFlibat" target="_blank" rel="noreferrer">
-                            @ItzFlibat on GitHub
-                        </a>
-                    </div>
-                </header>
-                <nav style={{ display: "flex", gap: 8, borderBottom: "1px solid var(--background-modifier-accent)", paddingBottom: 12 }}>
-                    <button onClick={() => this.setState({ tab: "plugins" })} aria-selected={this.state.tab === "plugins"}>
-                        Plugins
-                    </button>
-                    <button onClick={() => this.setState({ tab: "settings" })} aria-selected={this.state.tab === "settings"}>
-                        Settings
-                    </button>
-                    <button onClick={() => this.setState({ tab: "about" })} aria-selected={this.state.tab === "about"}>
-                        About
-                    </button>
-                </nav>
-                {this.state.tab === "plugins" ? (
-                    <section>
-                        <p>
-                            Manage your BetterDiscord plugins from one place. The shared library is required and stays enabled. Plugins
-                            update from GitHub when you choose.
-                        </p>
-                        <button disabled={state.checking} onClick={() => void checkForUpdates(true)}>
-                            Check for updates
-                        </button>
-                        {MANAGED_PLUGINS.map(plugin => this.renderPlugin(plugin))}
-                    </section>
-                ) : this.state.tab === "settings" ? (
-                    <section>{this.renderSettings()}</section>
-                ) : (
-                    <section>
-                        <h2>YACBDP</h2>
-                        <p>This plugin provides shared settings, update checks, and the plugin dashboard for this collection.</p>
-                        <p>Version {VERSION}</p>
-                        <p>
-                            Website:{" "}
+function buildDashboard() {
+    const categories: SettingsCategory[] = [
+        {
+            id: "plugins",
+            name: "Plugins",
+            shown: true,
+            settings: [
+                {
+                    type: "custom",
+                    id: "check-updates",
+                    name: "Updates",
+                    note: "Plugins update from GitHub when you choose.",
+                    inline: true,
+                    children: <UpdateRow />
+                },
+                ...MANAGED_PLUGINS.map(plugin => ({
+                    type: "custom",
+                    id: `plugin-${plugin.id}`,
+                    name: plugin.name,
+                    note: plugin.description,
+                    inline: true,
+                    children: <PluginRow plugin={plugin} />
+                }))
+            ]
+        },
+        {
+            id: "updates",
+            name: "Updates",
+            shown: true,
+            settings: [
+                {
+                    type: "switch",
+                    id: "checkForUpdates",
+                    name: "Check for plugin updates",
+                    note: "Checks GitHub every few hours for newer versions of the collection plugins.",
+                    value: state.settings.checkForUpdates
+                },
+                {
+                    type: "switch",
+                    id: "notifyOnUpdate",
+                    name: "Show a notice when an update is available",
+                    value: state.settings.notifyOnUpdate
+                },
+                {
+                    type: "switch",
+                    id: "notifyOnPluginUpdated",
+                    name: "Show what changed after a plugin updates",
+                    value: state.settings.notifyOnPluginUpdated
+                }
+            ]
+        },
+        {
+            id: "about",
+            name: "About",
+            shown: false,
+            settings: [
+                {
+                    type: "custom",
+                    id: "about-links",
+                    name: `YACBDP v${VERSION}`,
+                    note: "Shared settings, update checks, and plugin dashboard for Yet Another Collection of BetterDiscord Plugins.",
+                    children: (
+                        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                            <a href="https://github.com/ItzFlibat/BetterDiscordPlugins" target="_blank" rel="noreferrer">
+                                GitHub
+                            </a>
                             <a href="https://flibat.com" target="_blank" rel="noreferrer">
                                 flibat.com
                             </a>
-                        </p>
-                        <p>
-                            Discord:{" "}
                             <a href="https://flibat.com/discord" target="_blank" rel="noreferrer">
-                                flibat.com/discord
+                                Discord
                             </a>
-                        </p>
-                        <p>
-                            Source:{" "}
-                            <a href="https://github.com/ItzFlibat/BetterDiscordPlugins" target="_blank" rel="noreferrer">
-                                GitHub repository
-                            </a>
-                        </p>
-                    </section>
-                )}
-            </main>
-        );
-    }
+                        </div>
+                    )
+                }
+            ]
+        }
+    ];
+    return buildPanel(categories, (_category, id, value) => {
+        if (!(id in DEFAULT_SETTINGS)) return;
+        state.settings = { ...state.settings, [id]: Boolean(value) };
+        BdApi.Data.save(PLUGIN_NAME, "library-settings", state.settings);
+        if (id === "checkForUpdates" && value) void checkForUpdates();
+    });
 }
 
 export default class YACBDP {
@@ -434,6 +405,6 @@ export default class YACBDP {
     }
 
     getSettingsPanel() {
-        return <PluginDashboard />;
+        return buildDashboard();
     }
 }

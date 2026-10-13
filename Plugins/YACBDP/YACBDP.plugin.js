@@ -1,7 +1,7 @@
 /**
  * @name YACBDP
  * @displayName YACBDP
- * @version 1.1.0
+ * @version 1.1.1
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/YACBDP
@@ -40,7 +40,7 @@
     }); // ./src/config.json
 
     const config_namespaceObject = /*#__PURE__*/ JSON.parse(
-        '{"rE":"1.1.0","cy":"ItzFlibat","h_":"Shared runtime and plugin dashboard for Yet Another Collection of BetterDiscord Plugins."}'
+        '{"rE":"1.1.1","cy":"ItzFlibat","h_":"Shared runtime and plugin dashboard for Yet Another Collection of BetterDiscord Plugins."}'
     ); // ./src/index.tsx
     const PLUGIN_NAME = "YACBDP";
     const VERSION = config_namespaceObject.rE;
@@ -227,392 +227,225 @@
             }
         });
     }
-    class PluginDashboard extends BdApi.React.Component {
-        constructor(props) {
-            super(props);
-            this.state = {
-                tab: "plugins",
-                refresh: 0,
-                busy: {}
-            };
-            this.timer = setInterval(
-                () =>
-                    this.setState(current => ({
-                        refresh: current.refresh + 1
-                    })),
-                1500
+    function useTicker() {
+        const [, setTick] = BdApi.React.useState(0);
+        BdApi.React.useEffect(() => {
+            const timer = setInterval(() => setTick(tick => tick + 1), 1500);
+            return () => clearInterval(timer);
+        }, []);
+        return () => setTick(tick => tick + 1);
+    }
+    function UIButton(props) {
+        const Button = BdApi.Components?.Button;
+        if (!Button) {
+            return BdApi.React.createElement(
+                "button",
+                {
+                    disabled: props.disabled,
+                    onClick: props.onClick
+                },
+                props.label
             );
         }
-        componentWillUnmount() {
-            clearInterval(this.timer);
-        }
-        async run(id, action) {
-            this.setState(current => ({
-                busy: {
-                    ...current.busy,
-                    [id]: true
-                }
-            }));
+        return BdApi.React.createElement(
+            Button,
+            {
+                color: props.primary ? Button.Colors?.BRAND : Button.Colors?.PRIMARY,
+                size: Button.Sizes?.SMALL,
+                disabled: props.disabled,
+                onClick: props.onClick
+            },
+            props.label
+        );
+    }
+    function PluginRow(props) {
+        const refresh = useTicker();
+        const [busy, setBusy] = BdApi.React.useState(false);
+        const { plugin } = props;
+        const version = installedVersion(plugin.id);
+        const enabled = Boolean(version && BdApi.Plugins.isEnabled(plugin.id));
+        const isLibrary = plugin.id === PLUGIN_NAME;
+        const latest = state.available[plugin.id];
+        const run = async action => {
+            setBusy(true);
             try {
                 await action();
             } finally {
-                this.setState(current => ({
-                    busy: {
-                        ...current.busy,
-                        [id]: false
-                    },
-                    refresh: current.refresh + 1
-                }));
+                setBusy(false);
+                refresh();
             }
-        }
-        renderPlugin(plugin) {
-            const version = installedVersion(plugin.id);
-            const installed = Boolean(version);
-            const enabled = Boolean(installed && BdApi.Plugins.isEnabled(plugin.id));
-            const isLibrary = plugin.id === PLUGIN_NAME;
-            const latest = state.available[plugin.id];
-            const busy = Boolean(this.state.busy[plugin.id]);
-            return BdApi.React.createElement(
-                "article",
-                {
-                    key: plugin.id,
-                    style: {
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 16,
-                        padding: 16,
-                        margin: "12px 0",
-                        borderRadius: 8,
-                        background: "var(--background-secondary)"
-                    }
-                },
-                BdApi.React.createElement(
-                    "div",
-                    {
-                        style: {
-                            flex: 1
-                        }
-                    },
-                    BdApi.React.createElement(
-                        "div",
-                        {
-                            style: {
-                                fontWeight: 700,
-                                fontSize: 16
-                            }
-                        },
-                        plugin.name,
-                        " ",
-                        version &&
-                            BdApi.React.createElement(
-                                "small",
-                                {
-                                    style: {
-                                        opacity: 0.65
-                                    }
-                                },
-                                "v",
-                                version
-                            ),
-                        latest &&
-                            BdApi.React.createElement(
-                                "small",
-                                {
-                                    style: {
-                                        marginLeft: 8,
-                                        color: "var(--text-positive)"
-                                    }
-                                },
-                                "v",
-                                latest,
-                                " available"
-                            )
-                    ),
-                    BdApi.React.createElement(
-                        "div",
-                        {
-                            style: {
-                                opacity: 0.8,
-                                marginTop: 5
-                            }
-                        },
-                        plugin.description
-                    ),
-                    BdApi.React.createElement(
-                        "div",
-                        {
-                            style: {
-                                marginTop: 8
-                            }
-                        },
-                        BdApi.React.createElement(
-                            "a",
-                            {
-                                href: `https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/${plugin.id}`,
-                                target: "_blank",
-                                rel: "noreferrer"
-                            },
-                            "Source"
-                        )
-                    )
-                ),
-                latest &&
-                    BdApi.React.createElement(
-                        "button",
-                        {
-                            disabled: busy,
-                            onClick: () => void this.run(plugin.id, () => installPlugin(plugin.id, true)),
-                            style: {
-                                minWidth: 90
-                            }
-                        },
-                        "Update"
-                    ),
-                !installed
-                    ? BdApi.React.createElement(
-                          "button",
-                          {
-                              disabled: busy,
-                              onClick: () => void this.run(plugin.id, () => installPlugin(plugin.id, false)),
-                              style: {
-                                  minWidth: 110
-                              }
-                          },
-                          "Install"
-                      )
-                    : BdApi.React.createElement(
-                          "button",
-                          {
-                              disabled: isLibrary,
-                              onClick: () => {
-                                  if (enabled) BdApi.Plugins.disable(plugin.id);
-                                  else BdApi.Plugins.enable(plugin.id);
-                                  this.setState(current => ({
-                                      refresh: current.refresh + 1
-                                  }));
-                              },
-                              style: {
-                                  minWidth: 110
-                              }
-                          },
-                          isLibrary ? "Required" : enabled ? "Disable" : "Enable"
-                      )
-            );
-        }
-        renderSettings() {
-            const categories = [
-                {
-                    id: "updates",
-                    name: "Updates",
-                    shown: true,
-                    settings: [
-                        {
-                            type: "switch",
-                            id: "checkForUpdates",
-                            name: "Check for plugin updates",
-                            note: "Checks GitHub every few hours for newer versions of the collection plugins.",
-                            value: state.settings.checkForUpdates
-                        },
-                        {
-                            type: "switch",
-                            id: "notifyOnUpdate",
-                            name: "Show a notice when an update is available",
-                            value: state.settings.notifyOnUpdate
-                        },
-                        {
-                            type: "switch",
-                            id: "notifyOnPluginUpdated",
-                            name: "Show what changed after a plugin updates",
-                            value: state.settings.notifyOnPluginUpdated
-                        }
-                    ]
+        };
+        const Text = BdApi.Components?.Text;
+        const label = text => (Text ? BdApi.React.createElement(Text, null, text) : BdApi.React.createElement("span", null, text));
+        return BdApi.React.createElement(
+            "div",
+            {
+                style: {
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    width: "100%",
+                    justifyContent: "flex-end"
                 }
-            ];
-            return buildPanel(categories, (_category, id, value) => {
-                if (!(id in DEFAULT_SETTINGS)) return;
-                state.settings = {
-                    ...state.settings,
-                    [id]: Boolean(value)
-                };
-                BdApi.Data.save(PLUGIN_NAME, "library-settings", state.settings);
-                if (id === "checkForUpdates" && value) void checkForUpdates();
-            });
-        }
-        render() {
-            return BdApi.React.createElement(
-                "main",
+            },
+            BdApi.React.createElement(
+                "div",
                 {
                     style: {
-                        maxWidth: 900,
-                        padding: 24,
-                        color: "var(--text-normal)"
+                        flex: 1,
+                        opacity: 0.8
                     }
                 },
-                BdApi.React.createElement(
-                    "header",
+                label(version ? `Installed: v${version}` : "Not installed"),
+                latest && label(`Available: v${latest}`)
+            ),
+            latest &&
+                BdApi.React.createElement(UIButton, {
+                    primary: true,
+                    label: "Update",
+                    disabled: busy,
+                    onClick: () => void run(() => installPlugin(plugin.id, true))
+                }),
+            !version
+                ? BdApi.React.createElement(UIButton, {
+                      primary: true,
+                      label: "Install",
+                      disabled: busy,
+                      onClick: () => void run(() => installPlugin(plugin.id, false))
+                  })
+                : BdApi.React.createElement(UIButton, {
+                      label: isLibrary ? "Required" : enabled ? "Disable" : "Enable",
+                      disabled: isLibrary,
+                      onClick: () => {
+                          if (enabled) BdApi.Plugins.disable(plugin.id);
+                          else BdApi.Plugins.enable(plugin.id);
+                          refresh();
+                      }
+                  })
+        );
+    }
+    function UpdateRow() {
+        useTicker();
+        return BdApi.React.createElement(UIButton, {
+            primary: true,
+            label: state.checking ? "Checking..." : "Check for updates",
+            disabled: state.checking,
+            onClick: () => void checkForUpdates(true)
+        });
+    }
+    function buildDashboard() {
+        const categories = [
+            {
+                id: "plugins",
+                name: "Plugins",
+                shown: true,
+                settings: [
                     {
-                        style: {
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 16,
-                            marginBottom: 24
-                        }
+                        type: "custom",
+                        id: "check-updates",
+                        name: "Updates",
+                        note: "Plugins update from GitHub when you choose.",
+                        inline: true,
+                        children: BdApi.React.createElement(UpdateRow, null)
                     },
-                    BdApi.React.createElement("img", {
-                        src: "https://github.com/ItzFlibat.png",
-                        alt: "ItzFlibat GitHub profile",
-                        style: {
-                            width: 64,
-                            height: 64,
-                            borderRadius: "50%"
-                        }
-                    }),
-                    BdApi.React.createElement(
-                        "div",
-                        null,
-                        BdApi.React.createElement(
-                            "h1",
+                    ...MANAGED_PLUGINS.map(plugin => ({
+                        type: "custom",
+                        id: `plugin-${plugin.id}`,
+                        name: plugin.name,
+                        note: plugin.description,
+                        inline: true,
+                        children: BdApi.React.createElement(PluginRow, {
+                            plugin: plugin
+                        })
+                    }))
+                ]
+            },
+            {
+                id: "updates",
+                name: "Updates",
+                shown: true,
+                settings: [
+                    {
+                        type: "switch",
+                        id: "checkForUpdates",
+                        name: "Check for plugin updates",
+                        note: "Checks GitHub every few hours for newer versions of the collection plugins.",
+                        value: state.settings.checkForUpdates
+                    },
+                    {
+                        type: "switch",
+                        id: "notifyOnUpdate",
+                        name: "Show a notice when an update is available",
+                        value: state.settings.notifyOnUpdate
+                    },
+                    {
+                        type: "switch",
+                        id: "notifyOnPluginUpdated",
+                        name: "Show what changed after a plugin updates",
+                        value: state.settings.notifyOnPluginUpdated
+                    }
+                ]
+            },
+            {
+                id: "about",
+                name: "About",
+                shown: false,
+                settings: [
+                    {
+                        type: "custom",
+                        id: "about-links",
+                        name: `YACBDP v${VERSION}`,
+                        note: "Shared settings, update checks, and plugin dashboard for Yet Another Collection of BetterDiscord Plugins.",
+                        children: BdApi.React.createElement(
+                            "div",
                             {
                                 style: {
-                                    margin: 0
+                                    display: "flex",
+                                    gap: 16,
+                                    flexWrap: "wrap"
                                 }
                             },
-                            "YACBDP"
-                        ),
-                        BdApi.React.createElement(
-                            "a",
-                            {
-                                href: "https://github.com/ItzFlibat",
-                                target: "_blank",
-                                rel: "noreferrer"
-                            },
-                            "@ItzFlibat on GitHub"
-                        )
-                    )
-                ),
-                BdApi.React.createElement(
-                    "nav",
-                    {
-                        style: {
-                            display: "flex",
-                            gap: 8,
-                            borderBottom: "1px solid var(--background-modifier-accent)",
-                            paddingBottom: 12
-                        }
-                    },
-                    BdApi.React.createElement(
-                        "button",
-                        {
-                            onClick: () =>
-                                this.setState({
-                                    tab: "plugins"
-                                }),
-                            "aria-selected": this.state.tab === "plugins"
-                        },
-                        "Plugins"
-                    ),
-                    BdApi.React.createElement(
-                        "button",
-                        {
-                            onClick: () =>
-                                this.setState({
-                                    tab: "settings"
-                                }),
-                            "aria-selected": this.state.tab === "settings"
-                        },
-                        "Settings"
-                    ),
-                    BdApi.React.createElement(
-                        "button",
-                        {
-                            onClick: () =>
-                                this.setState({
-                                    tab: "about"
-                                }),
-                            "aria-selected": this.state.tab === "about"
-                        },
-                        "About"
-                    )
-                ),
-                this.state.tab === "plugins"
-                    ? BdApi.React.createElement(
-                          "section",
-                          null,
-                          BdApi.React.createElement(
-                              "p",
-                              null,
-                              "Manage your BetterDiscord plugins from one place. The shared library is required and stays enabled. Plugins update from GitHub when you choose."
-                          ),
-                          BdApi.React.createElement(
-                              "button",
-                              {
-                                  disabled: state.checking,
-                                  onClick: () => void checkForUpdates(true)
-                              },
-                              "Check for updates"
-                          ),
-                          MANAGED_PLUGINS.map(plugin => this.renderPlugin(plugin))
-                      )
-                    : this.state.tab === "settings"
-                      ? BdApi.React.createElement("section", null, this.renderSettings())
-                      : BdApi.React.createElement(
-                            "section",
-                            null,
-                            BdApi.React.createElement("h2", null, "YACBDP"),
                             BdApi.React.createElement(
-                                "p",
-                                null,
-                                "This plugin provides shared settings, update checks, and the plugin dashboard for this collection."
-                            ),
-                            BdApi.React.createElement("p", null, "Version ", VERSION),
-                            BdApi.React.createElement(
-                                "p",
-                                null,
-                                "Website:",
-                                " ",
-                                BdApi.React.createElement(
-                                    "a",
-                                    {
-                                        href: "https://flibat.com",
-                                        target: "_blank",
-                                        rel: "noreferrer"
-                                    },
-                                    "flibat.com"
-                                )
+                                "a",
+                                {
+                                    href: "https://github.com/ItzFlibat/BetterDiscordPlugins",
+                                    target: "_blank",
+                                    rel: "noreferrer"
+                                },
+                                "GitHub"
                             ),
                             BdApi.React.createElement(
-                                "p",
-                                null,
-                                "Discord:",
-                                " ",
-                                BdApi.React.createElement(
-                                    "a",
-                                    {
-                                        href: "https://flibat.com/discord",
-                                        target: "_blank",
-                                        rel: "noreferrer"
-                                    },
-                                    "flibat.com/discord"
-                                )
+                                "a",
+                                {
+                                    href: "https://flibat.com",
+                                    target: "_blank",
+                                    rel: "noreferrer"
+                                },
+                                "flibat.com"
                             ),
                             BdApi.React.createElement(
-                                "p",
-                                null,
-                                "Source:",
-                                " ",
-                                BdApi.React.createElement(
-                                    "a",
-                                    {
-                                        href: "https://github.com/ItzFlibat/BetterDiscordPlugins",
-                                        target: "_blank",
-                                        rel: "noreferrer"
-                                    },
-                                    "GitHub repository"
-                                )
+                                "a",
+                                {
+                                    href: "https://flibat.com/discord",
+                                    target: "_blank",
+                                    rel: "noreferrer"
+                                },
+                                "Discord"
                             )
                         )
-            );
-        }
+                    }
+                ]
+            }
+        ];
+        return buildPanel(categories, (_category, id, value) => {
+            if (!(id in DEFAULT_SETTINGS)) return;
+            state.settings = {
+                ...state.settings,
+                [id]: Boolean(value)
+            };
+            BdApi.Data.save(PLUGIN_NAME, "library-settings", state.settings);
+            if (id === "checkForUpdates" && value) void checkForUpdates();
+        });
     }
     class YACBDP {
         getName() {
@@ -672,7 +505,7 @@
             if (window.YACBDP?.version === VERSION) delete window.YACBDP;
         }
         getSettingsPanel() {
-            return BdApi.React.createElement(PluginDashboard, null);
+            return buildDashboard();
         }
     }
     module.exports = __webpack_exports__["default"];
