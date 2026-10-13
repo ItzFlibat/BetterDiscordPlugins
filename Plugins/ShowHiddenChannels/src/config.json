@@ -1,10 +1,10 @@
 {
-  "name": "ShowHiddenChannels",
-  "displayName": "Show Hidden Channels (SHC)",
-  "version": "0.3.1",
-  "author": "ItzFlibat",
-  "authorId": "619203349954166804",
-  "source": "https://github.com/ItzFlibat/ShowHiddenChannels",
-  "website": "https://dsc.gg/ItzFlibat",
-  "description": "Show channels that you do not have access to view, this won't allow you to read them."
+    "name": "ShowHiddenChannels",
+    "displayName": "Show Hidden Channels",
+    "version": "2.1.0",
+    "author": "ItzFlibat",
+    "authorId": "619203349954166804",
+    "source": "https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/ShowHiddenChannels",
+    "website": "https://flibat.com",
+    "description": "Show hidden channels and inspect locally available channel information and permissions. Does not grant access to messages or voice channels."
 }

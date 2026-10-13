@@ -1,0 +1,23 @@
+{
+    "name": "betterdiscordplugins",
+    "private": true,
+    "workspaces": [
+        "Plugins/ShowHiddenChannels",
+        "Plugins/MessageLogger",
+        "Plugins/BetterDiscordBadges",
+        "Plugins/YACBDPLibrary"
+    ],
+    "scripts": {
+        "check:showhiddenchannels": "bun run --cwd Plugins/ShowHiddenChannels check",
+        "build:showhiddenchannels": "bun run --cwd Plugins/ShowHiddenChannels build",
+        "build:messagelogger": "bun run --cwd Plugins/MessageLogger build",
+        "build:betterdiscordbadges": "bun run --cwd Plugins/BetterDiscordBadges build",
+        "check:messagelogger": "bun run --cwd Plugins/MessageLogger typecheck",
+        "check:betterdiscordbadges": "bun run --cwd Plugins/BetterDiscordBadges typecheck",
+        "build:yacbdplibrary": "bun run --cwd Plugins/YACBDPLibrary build",
+        "check:yacbdplibrary": "bun run --cwd Plugins/YACBDPLibrary typecheck"
+    },
+    "devDependencies": {
+        "prettier": "^3.9.10"
+    }
+}

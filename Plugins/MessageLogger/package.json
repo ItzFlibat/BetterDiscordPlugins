@@ -1,0 +1,25 @@
+{
+    "name": "messagelogger",
+    "description": "Locally records deleted messages and message edits for review in BetterDiscord.",
+    "version": "1.1.0",
+    "private": true,
+    "main": "MessageLogger.plugin.js",
+    "scripts": {
+        "build": "bun run typecheck && bun run webpack",
+        "typecheck": "tsc --noEmit",
+        "watch": "bun run webpack --watch",
+        "dev": "bun run webpack --watch --mode development"
+    },
+    "author": "ItzFlibat",
+    "devDependencies": {
+        "@babel/core": "^7.26.9",
+        "@babel/preset-env": "^7.26.9",
+        "@babel/preset-react": "^7.26.3",
+        "@babel/preset-typescript": "^7.26.0",
+        "@types/node": "^20.11.16",
+        "babel-loader": "^9.2.1",
+        "typescript": "^5.3.3",
+        "webpack": "^5.98.0",
+        "webpack-cli": "^5.1.4"
+    }
+}
