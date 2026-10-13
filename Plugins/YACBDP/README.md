@@ -1,6 +1,10 @@
 # YACBDP
 
-YACBDP provides the shared runtime required by the plugins in this collection and a plugin dashboard. Open **Settings → BetterDiscord → Plugins → YACBDP → Settings** to see installed collection plugins, their versions, source links, and enable or disable controls.
+YACBDP provides the shared runtime required by the plugins in this collection and a plugin dashboard with update checks. Open **Settings → BetterDiscord → Plugins → YACBDP → Settings** to see installed collection plugins, their versions, source links, and enable or disable controls.
+
+## Updates
+
+YACBDP checks GitHub every few hours for newer versions of the collection plugins and shows a notice with an **Update** button. The dashboard can also install or update plugins on demand. When a plugin is updated, it reports the old and new version and shows what changed. Update checks can be turned off in the **Settings** tab.
 
 ## Install
 
