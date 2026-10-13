@@ -1,7 +1,7 @@
 /**
  * @name MessageLogger
  * @displayName Message Logger
- * @version 1.1.0
+ * @version 1.2.0
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/MessageLogger
@@ -29,9 +29,16 @@
 /******/
 /************************************************************************/
 let __webpack_exports__ = {};
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   "default": () => (/* binding */ MessageLogger)
-/* harmony export */ });
+
+// EXPORTS
+__webpack_require__.d(__webpack_exports__, {
+  "default": () => (/* binding */ MessageLogger)
+});
+
+;// ./src/config.json
+const config_namespaceObject = {"rE":"1.2.0"};
+;// ./src/index.tsx
+
 const DEFAULT_SETTINGS = {
   logDeletes: true,
   logEdits: true,
@@ -60,7 +67,7 @@ class MessageLogger {
     return "ItzFlibat";
   }
   getVersion() {
-    return "1.1.0";
+    return config_namespaceObject.rE;
   }
   getDescription() {
     return "Locally records deleted messages and message edits for review in BetterDiscord.";
@@ -80,6 +87,15 @@ class MessageLogger {
       return;
     }
     this.dependencyAttempts = 0;
+    library.registerPlugin?.({
+      id: PLUGIN_NAME,
+      version: config_namespaceObject.rE,
+      changelog: [{
+        type: "added",
+        title: "Updates",
+        items: ["Update checks and change notices through YACBDP."]
+      }]
+    });
     this.logs = BdApi.Data.load(PLUGIN_NAME, LOG_KEY) ?? [];
     this.settings = {
       ...DEFAULT_SETTINGS,

@@ -1,3 +1,5 @@
+import config from "./config.json";
+
 interface MessageSnapshot {
     id: string;
     channelId: string;
@@ -59,7 +61,7 @@ export default class MessageLogger {
         return "ItzFlibat";
     }
     getVersion() {
-        return "1.1.0";
+        return config.version;
     }
     getDescription() {
         return "Locally records deleted messages and message edits for review in BetterDiscord.";
@@ -78,6 +80,11 @@ export default class MessageLogger {
             return;
         }
         this.dependencyAttempts = 0;
+        library.registerPlugin?.({
+            id: PLUGIN_NAME,
+            version: config.version,
+            changelog: [{ type: "added", title: "Updates", items: ["Update checks and change notices through YACBDP."] }]
+        });
         this.logs = BdApi.Data.load(PLUGIN_NAME, LOG_KEY) ?? [];
         this.settings = { ...DEFAULT_SETTINGS, ...(BdApi.Data.load(PLUGIN_NAME, SETTINGS_KEY) ?? {}) };
         this.prune();
