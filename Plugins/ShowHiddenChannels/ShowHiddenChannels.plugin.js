@@ -1,7 +1,7 @@
 /**
  * @name ShowHiddenChannels
  * @displayName Show Hidden Channels
- * @version 2.2.2
+ * @version 2.2.3
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/ShowHiddenChannels
@@ -488,7 +488,7 @@
             )
         );
     } // ./src/config.json
-    const config_namespaceObject = /*#__PURE__*/ JSON.parse('{"UU":"ShowHiddenChannels","rE":"2.2.2"}'); // ./src/styles.ts
+    const config_namespaceObject = /*#__PURE__*/ JSON.parse('{"UU":"ShowHiddenChannels","rE":"2.2.3"}'); // ./src/styles.ts
     /*
      * BetterDiscordPlugins
      * Copyright (c) 2026 ItzFlibat
@@ -526,6 +526,9 @@
      * SPDX-License-Identifier: GPL-3.0-only
      */
 
+    function ids(value) {
+        return Array.isArray(value) ? [...value] : value instanceof Set ? [...value] : [];
+    }
     function copy(value) {
         return Object.assign(Object.create(Object.getPrototypeOf(value)), value);
     }
@@ -542,7 +545,7 @@
         function cloneCategory(category) {
             const clone = copy(category);
             clone.channels = Object.fromEntries(
-                Object.entries(category.channels).map(([id, row]) => [
+                Object.entries(category.channels ?? {}).map(([id, row]) => [
                     id,
                     {
                         ...copy(row),
@@ -550,8 +553,8 @@
                     }
                 ])
             );
-            clone.shownChannelIds = [...category.shownChannelIds];
-            clone.hiddenChannelIds = category.hiddenChannelIds && [...category.hiddenChannelIds];
+            clone.shownChannelIds = ids(category.shownChannelIds);
+            clone.hiddenChannelIds = category.hiddenChannelIds && ids(category.hiddenChannelIds);
             if (settings.shouldShowEmptyCategory) clone.shouldShowEmptyCategory = () => true;
             categories.push(clone);
             return clone;
@@ -563,7 +566,7 @@
         if (settings.sort === "bottom") {
             for (const category of categories) {
                 category.shownChannelIds.sort(
-                    (a, b) => Number(isHidden(category.channels[a].record)) - Number(isHidden(category.channels[b].record))
+                    (a, b) => Number(isHidden(category.channels[a]?.record)) - Number(isHidden(category.channels[b]?.record))
                 );
             }
         }
@@ -830,7 +833,7 @@
                     return callback(instance, args, original);
                 } catch (error) {
                     this.report(key, error);
-                    return original(...args);
+                    return original.apply(instance, args);
                 }
             });
         }
@@ -854,7 +857,7 @@
         }
         patchPermissions(modules) {
             this.instead(modules.ChannelRecord.prototype, "isHidden", (channel, _args, original) =>
-                channel.guild_id && channelTypes[channel.type] ? this.isHidden(channel) : original()
+                channel.guild_id && channelTypes[channel.type] ? this.isHidden(channel) : original.call(channel)
             );
             this.after(modules.PermissionStore, "can", (_instance, [permission, channel], result) => {
                 if (!this.isHidden(channel)) return result;
@@ -874,9 +877,9 @@
                 "_sendMessage"
             ]) {
                 if (typeof modules.MessageActions[key] !== "function") continue;
-                this.instead(modules.MessageActions, key, (_instance, args, original) => {
+                this.instead(modules.MessageActions, key, (instance, args, original) => {
                     const id = typeof args[0] === "string" ? args[0] : (args[0]?.channelId ?? args[0]?.channel_id);
-                    return this.isHidden(modules.ChannelStore.getChannel(id)) ? Promise.resolve() : original(...args);
+                    return this.isHidden(modules.ChannelStore.getChannel(id)) ? Promise.resolve() : original.apply(instance, args);
                 });
             }
         }

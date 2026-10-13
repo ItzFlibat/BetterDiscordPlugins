@@ -1,7 +1,7 @@
 {
     "name": "showhiddenchannels",
     "description": "Show hidden channels and inspect locally available channel information and permissions.",
-    "version": "2.2.2",
+    "version": "2.2.3",
     "private": true,
     "main": "ShowHiddenChannels.plugin.js",
     "scripts": {

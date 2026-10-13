@@ -141,7 +141,7 @@ export default class ShowHiddenChannels {
                 return callback(instance, args, original);
             } catch (error) {
                 this.report(key, error);
-                return original(...args);
+                return original.apply(instance, args);
             }
         });
     }
@@ -168,7 +168,7 @@ export default class ShowHiddenChannels {
 
     private patchPermissions(modules: Modules): void {
         this.instead(modules.ChannelRecord.prototype, "isHidden", (channel: Channel, _args: unknown[], original: () => boolean) =>
-            channel.guild_id && channelTypes[channel.type] ? this.isHidden(channel) : original()
+            channel.guild_id && channelTypes[channel.type] ? this.isHidden(channel) : original.call(channel)
         );
         this.after(modules.PermissionStore, "can", (_instance: unknown, [permission, channel]: [bigint, Channel], result: boolean) => {
             if (!this.isHidden(channel)) return result;
@@ -189,9 +189,9 @@ export default class ShowHiddenChannels {
             "_sendMessage"
         ]) {
             if (typeof modules.MessageActions[key] !== "function") continue;
-            this.instead(modules.MessageActions, key, (_instance: unknown, args: any[], original: (...args: any[]) => unknown) => {
+            this.instead(modules.MessageActions, key, (instance: unknown, args: any[], original: (...args: any[]) => unknown) => {
                 const id = typeof args[0] === "string" ? args[0] : (args[0]?.channelId ?? args[0]?.channel_id);
-                return this.isHidden(modules.ChannelStore.getChannel(id)) ? Promise.resolve() : original(...args);
+                return this.isHidden(modules.ChannelStore.getChannel(id)) ? Promise.resolve() : original.apply(instance, args);
             });
         }
     }

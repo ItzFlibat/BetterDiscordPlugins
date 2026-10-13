@@ -6,6 +6,10 @@
 
 import type { Category, Channel, GuildList, Settings } from "../types";
 
+function ids(value: unknown): string[] {
+    return Array.isArray(value) ? [...value] : value instanceof Set ? [...value] : [];
+}
+
 function copy<T extends object>(value: T): T {
     return Object.assign(Object.create(Object.getPrototypeOf(value)), value);
 }
@@ -24,9 +28,11 @@ export function transformChannelList(
 
     function cloneCategory(category: Category): Category {
         const clone = copy(category);
-        clone.channels = Object.fromEntries(Object.entries(category.channels).map(([id, row]) => [id, { ...copy(row), category: clone }]));
-        clone.shownChannelIds = [...category.shownChannelIds];
-        clone.hiddenChannelIds = category.hiddenChannelIds && [...category.hiddenChannelIds];
+        clone.channels = Object.fromEntries(
+            Object.entries(category.channels ?? {}).map(([id, row]) => [id, { ...copy(row), category: clone }])
+        );
+        clone.shownChannelIds = ids(category.shownChannelIds);
+        clone.hiddenChannelIds = category.hiddenChannelIds && ids(category.hiddenChannelIds);
         if (settings.shouldShowEmptyCategory) clone.shouldShowEmptyCategory = () => true;
         categories.push(clone);
         return clone;
@@ -40,7 +46,7 @@ export function transformChannelList(
     if (settings.sort === "bottom") {
         for (const category of categories) {
             category.shownChannelIds.sort(
-                (a, b) => Number(isHidden(category.channels[a].record)) - Number(isHidden(category.channels[b].record))
+                (a, b) => Number(isHidden(category.channels[a]?.record)) - Number(isHidden(category.channels[b]?.record))
             );
         }
     }
