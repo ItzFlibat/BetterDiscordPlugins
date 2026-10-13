@@ -1,3 +1,5 @@
+import config from "./config.json";
+
 interface ServiceBadge {
     tooltip: string;
     mod: string;
@@ -59,7 +61,7 @@ export default class BetterDiscordBadges {
         return "ItzFlibat";
     }
     getVersion() {
-        return "1.1.1";
+        return config.version;
     }
     getDescription() {
         return "Shows client-mod badges from the Alliance badge service on Discord profiles.";
@@ -78,6 +80,18 @@ export default class BetterDiscordBadges {
             return;
         }
         this.dependencyAttempts = 0;
+        library.registerPlugin?.({
+            id: PLUGIN_NAME,
+            version: config.version,
+            changelog: [
+                {
+                    type: "fixed",
+                    title: "Profile badges",
+                    items: ["Badges are placed on profiles again after Discord changed its badge component."]
+                },
+                { type: "added", title: "Updates", items: ["Update checks and change notices through YACBDP."] }
+            ]
+        });
         this.stopped = false;
         const saved = BdApi.Data.load(PLUGIN_NAME, "settings") ?? {};
         this.settings = Object.fromEntries(
