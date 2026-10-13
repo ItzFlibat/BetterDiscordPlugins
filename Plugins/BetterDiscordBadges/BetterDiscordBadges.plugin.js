@@ -1,7 +1,7 @@
 /**
  * @name BetterDiscordBadges
  * @displayName BetterDiscord Badges
- * @version 1.2.0
+ * @version 1.2.1
  * @author ItzFlibat
  * @authorId 619203349954166804
  * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/BetterDiscordBadges
@@ -39,7 +39,7 @@
         default: () => /* binding */ BetterDiscordBadges
     }); // ./src/config.json
 
-    const config_namespaceObject = { rE: "1.2.0" }; // ./src/index.tsx
+    const config_namespaceObject = { rE: "1.2.1" }; // ./src/index.tsx
     const PLUGIN_NAME = "BetterDiscordBadges";
     const API_URL = "https://alliance.flibat.com/api/badges/users";
     const REFRESH_INTERVAL = 30 * 60 * 1000;
@@ -145,7 +145,7 @@
     class BetterDiscordBadges {
         users = {};
         settings = {};
-        warned = false;
+        cache = new Map();
         stopped = false;
         dependencyAttempts = 0;
         patchAttempts = 0;
@@ -243,6 +243,7 @@
                 const service = SERVICES.find(item => item.id === id);
                 if (!service || service.forced) return;
                 this.settings[id] = value;
+                this.cache.clear();
                 BdApi.Data.save(PLUGIN_NAME, "settings", this.settings);
             };
             const library = window.YACBDP;
@@ -269,58 +270,31 @@
             });
         }
         installProfilePatch() {
-            // Discord compiles intl keys to hashes, so PROFILE_USER_BADGES never appears in source. The badge list
-            // component renders badge objects through their iconSrc, so match on that instead.
-            const source = value => {
+            // Discord compiles intl keys to hashes, so match the profile badge list by its component name instead.
+            const filter = value => {
+                if (typeof value !== "function") return false;
                 try {
-                    return Function.prototype.toString.call(value);
+                    return Function.prototype.toString.call(value).includes("UserProfileBadgeListRows");
                 } catch {
-                    return "";
+                    return false;
                 }
             };
-            const looksLikeBadgeList = code => code.includes("iconSrc") && /aria-label|ariaLabel|forceOpen|ariaHidden/.test(code);
-            const resolve = value => {
-                if (typeof value === "function") return undefined;
-                if (value && typeof value === "object") {
-                    if (typeof value.type === "function" && looksLikeBadgeList(source(value.type)))
-                        return {
-                            target: value,
-                            key: "type"
-                        };
-                    if (typeof value.render === "function" && looksLikeBadgeList(source(value.render)))
-                        return {
-                            target: value,
-                            key: "render"
-                        };
-                }
-                return undefined;
-            };
-            const filter = value =>
-                (typeof value === "function" && looksLikeBadgeList(source(value))) ||
-                (value && typeof value === "object" && Boolean(resolve(value)));
             const pair = BdApi.Webpack.getWithKey(filter, {
                 searchExports: true
             });
             if (!pair || !pair[0] || !pair[1]) return false;
-            let [module, key] = pair;
-            const inner = resolve(module[key]);
-            if (inner) {
-                module = inner.target;
-                key = inner.key;
-            }
-            this.patch = BdApi.Patcher.after(PLUGIN_NAME, module, key, (_, args, result) => {
-                const userId = this.findUserId(args);
-                if (!userId || !result) return result;
-                const badges = this.makeElements(userId);
-                if (badges.length === 0) return result;
-                const updated = this.appendToBadgeRow(result, badges);
-                if (updated) return updated;
-                if (!this.warned) {
-                    this.warned = true;
-                    BdApi.Logger.warn(PLUGIN_NAME, "The profile badge layout changed; using a fallback placement.");
-                }
-                const children = Array.isArray(result.props?.children) ? result.props.children.slice() : [result.props?.children];
-                return BdApi.React.cloneElement(result, {}, ...children.filter(Boolean), this.makeRow(badges));
+            const [module, key] = pair;
+            // The list merges `pendingBadges` into the badges it renders, which lets us add ours without touching its markup.
+            this.patch = BdApi.Patcher.before(PLUGIN_NAME, module, key, (_, args) => {
+                const props = args[0];
+                const userId = props?.displayProfile?.userId;
+                if (!userId) return;
+                const badges = this.makeBadges(String(userId));
+                if (badges.length === 0) return;
+                args[0] = {
+                    ...props,
+                    pendingBadges: [...(props.pendingBadges ?? []), ...badges]
+                };
             });
             return true;
         }
@@ -337,43 +311,28 @@
                 const data = await response.json();
                 if (!data || typeof data.users !== "object" || Array.isArray(data.users))
                     throw new Error("Badge service returned an invalid response.");
-                if (!this.stopped) this.users = data.users;
+                if (!this.stopped) {
+                    this.users = data.users;
+                    this.cache.clear();
+                }
             } catch (error) {
                 if (error?.name !== "AbortError") BdApi.Logger.warn(PLUGIN_NAME, "Unable to refresh profile badges.", error);
             }
         }
-        findUserId(args) {
+        makeBadges(userId) {
+            const raw = this.users[userId] ?? [];
+            const cacheKey = `${userId}:${raw.length}:${Object.values(this.settings).filter(Boolean).length}`;
+            const cached = this.cache.get(userId);
+            if (cached?.key === cacheKey) return cached.badges;
             const seen = new Set();
-            const search = (value, depth) => {
-                if (!value || typeof value !== "object" || depth > 5 || seen.has(value)) return undefined;
-                seen.add(value);
-                const likely =
-                    value.userId ??
-                    value.user_id ??
-                    value.displayProfile?.userId ??
-                    value.displayProfile?.user?.id ??
-                    value.user?.id ??
-                    value.profile?.userId;
-                if (likely != null && /^\d{15,25}$/.test(String(likely))) return String(likely);
-                for (const key of ["props", "displayProfile", "profile", "user", "children"]) {
-                    const found = search(value[key], depth + 1);
-                    if (found) return found;
-                }
-                return undefined;
-            };
-            return search(args, 0);
-        }
-        makeElements(userId) {
-            const visible = (this.users[userId] ?? []).filter(badge => {
-                if (!badge || typeof badge.badge !== "string" || typeof badge.tooltip !== "string") return false;
-                return Boolean(this.settings[badge.mod]) || badge.mod === "allicord" || badge.mod === "betterdiscord";
-            });
-            const seen = new Set();
-            return visible.flatMap((badge, index) => {
+            const badges = raw.flatMap((badge, index) => {
+                if (!badge || typeof badge.badge !== "string" || typeof badge.tooltip !== "string") return [];
+                if (!this.settings[badge.mod] && badge.mod !== "allicord" && badge.mod !== "betterdiscord") return [];
                 let url;
                 try {
-                    url = new URL(badge.badge, "https://alliance.flibat.com/").href;
-                    if (new URL(url).protocol !== "https:") return [];
+                    const parsed = new URL(badge.badge, "https://alliance.flibat.com/");
+                    if (parsed.protocol !== "https:") return [];
+                    url = parsed.href;
                 } catch {
                     return [];
                 }
@@ -381,78 +340,18 @@
                 if (seen.has(key)) return [];
                 seen.add(key);
                 return [
-                    BdApi.React.createElement("img", {
-                        key: `${badge.mod}-${index}-${userId}`,
-                        className: "bd-badges-client-mod",
-                        src: url,
-                        alt: badge.tooltip,
-                        title: badge.tooltip,
-                        "aria-label": badge.tooltip,
-                        style: {
-                            width: 22,
-                            height: 22,
-                            objectFit: "contain",
-                            borderRadius: "50%",
-                            marginInlineStart: 4,
-                            verticalAlign: "middle"
-                        }
-                    })
+                    {
+                        id: `yacbdp-${badge.mod}-${index}`,
+                        description: badge.tooltip,
+                        iconSrc: url
+                    }
                 ];
             });
-        }
-        makeRow(badges) {
-            return BdApi.React.createElement(
-                "span",
-                {
-                    className: "bd-badges-client-mod-row",
-                    style: {
-                        display: "inline-flex",
-                        alignItems: "center"
-                    }
-                },
-                ...badges
-            );
-        }
-        appendToBadgeRow(root, badges) {
-            const visit = (node, depth) => {
-                if (!node || typeof node !== "object" || depth > 20) return node;
-                if (Array.isArray(node)) return node.map(item => visit(item, depth + 1));
-                if (!node.props) return node;
-                const props = node.props;
-                const own = `${props.className ?? ""} ${props["aria-label"] ?? ""} ${props.title ?? ""}`.toLowerCase();
-                const children = props.children;
-                const hasImage = value =>
-                    Array.isArray(value)
-                        ? value.some(hasImage)
-                        : Boolean(value?.type === "img" || (value?.props?.src && (value?.props?.alt || value?.props?.["aria-label"])));
-                if (/badge/.test(own) && (hasImage(children) || /profile.*badge/.test(own))) {
-                    const existing = Array.isArray(children) ? children : children == null ? [] : [children];
-                    if (existing.some(child => child?.props?.className === "bd-badges-client-mod")) return node;
-                    return BdApi.React.cloneElement(node, {}, ...existing, ...badges);
-                }
-                if (children) {
-                    const updated = (Array.isArray(children) ? children : [children]).map(child => visit(child, depth + 1));
-                    if (updated.some((child, index) => child !== (Array.isArray(children) ? children[index] : children))) {
-                        return BdApi.React.cloneElement(node, {}, ...updated);
-                    }
-                }
-                return node;
-            };
-            const hasBadgeRow = (node, depth) => {
-                if (!node || depth > 20) return false;
-                if (Array.isArray(node)) return node.some(child => hasBadgeRow(child, depth + 1));
-                if (typeof node !== "object" || !node.props) return false;
-                const own = `${node.props.className ?? ""} ${node.props["aria-label"] ?? ""} ${node.props.title ?? ""}`.toLowerCase();
-                const children = node.props.children;
-                const hasImage = value =>
-                    Array.isArray(value)
-                        ? value.some(hasImage)
-                        : Boolean(value?.type === "img" || (value?.props?.src && (value?.props?.alt || value?.props?.["aria-label"])));
-                return (/badge/.test(own) && (hasImage(children) || /profile.*badge/.test(own))) || hasBadgeRow(children, depth + 1);
-            };
-            if (!hasBadgeRow(root, 0)) return null;
-            const updated = visit(root, 0);
-            return updated;
+            this.cache.set(userId, {
+                key: cacheKey,
+                badges
+            });
+            return badges;
         }
     }
     module.exports = __webpack_exports__["default"];
