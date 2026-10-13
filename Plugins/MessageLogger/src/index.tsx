@@ -20,6 +20,7 @@ interface LogEntry {
 
 interface Settings {
     logDeletes: boolean;
+    keepDeletedVisible: boolean;
     logEdits: boolean;
     logDirectMessages: boolean;
     ignoreBots: boolean;
@@ -31,6 +32,7 @@ interface Settings {
 
 const DEFAULT_SETTINGS: Settings = {
     logDeletes: true,
+    keepDeletedVisible: true,
     logEdits: true,
     logDirectMessages: true,
     ignoreBots: false,
@@ -43,6 +45,7 @@ const DEFAULT_SETTINGS: Settings = {
 const PLUGIN_NAME = "MessageLogger";
 const LOG_KEY = "logs";
 const SETTINGS_KEY = "settings";
+const GHOST_STYLE_ID = "message-logger-deleted";
 const MENU_ID = "message-logger-channel";
 
 export default class MessageLogger {
@@ -53,6 +56,7 @@ export default class MessageLogger {
     private unpatches: Array<() => void> = [];
     private dependencyTimer: ReturnType<typeof setTimeout> | undefined;
     private dependencyAttempts = 0;
+    private ghosts: string[] = [];
     private saveTimer: ReturnType<typeof setTimeout> | undefined;
 
     getName() {
@@ -84,12 +88,22 @@ export default class MessageLogger {
         library.registerPlugin?.({
             id: PLUGIN_NAME,
             version: config.version,
-            changelog: [{ type: "added", title: "Updates", items: ["Update checks and change notices through YACBDP."] }]
+            changelog: [
+                {
+                    type: "added",
+                    title: "Deleted messages",
+                    items: ["Deleted messages from other people stay visible in the chat, highlighted, and are recorded reliably."]
+                },
+                { type: "fixed", title: "Edits", items: ["Message edits are now recorded."] }
+            ]
         });
         this.logs = BdApi.Data.load(PLUGIN_NAME, LOG_KEY) ?? [];
         this.settings = { ...DEFAULT_SETTINGS, ...(BdApi.Data.load(PLUGIN_NAME, SETTINGS_KEY) ?? {}) };
         this.prune();
-        this.dispatcher = BdApi.Webpack.getByKeys("dispatch", "subscribe");
+        this.dispatcher =
+            BdApi.Webpack.getByKeys("dispatch", "subscribe", "flushWaitQueue") ??
+            BdApi.Webpack.getByKeys("actionLogger", "dispatch") ??
+            BdApi.Webpack.getByKeys("dispatch", "subscribe");
         this.messageStore = BdApi.Webpack.getStore("MessageStore");
         if (!this.dispatcher || !this.messageStore) {
             BdApi.Logger.error(PLUGIN_NAME, "Could not find Discord's dispatcher or message store; logging is disabled.");
@@ -97,17 +111,24 @@ export default class MessageLogger {
             return;
         }
 
-        BdApi.Patcher.before(PLUGIN_NAME, this.dispatcher, "dispatch", (_: unknown, args: any[]) => {
+        BdApi.Patcher.instead(PLUGIN_NAME, this.dispatcher, "dispatch", (instance: any, args: any[], original: (...args: any[]) => any) => {
             const event = args[0];
-            if (!event || typeof event.type !== "string") return;
-            try {
-                if (event.type === "MESSAGE_DELETE" && this.settings.logDeletes) this.onDelete(event);
-                else if (event.type === "MESSAGE_DELETE_BULK" && this.settings.logDeletes) this.onBulkDelete(event);
-                else if (event.type === "MESSAGE_UPDATE" && this.settings.logEdits) this.onUpdate(event);
-            } catch (error) {
-                BdApi.Logger.error(PLUGIN_NAME, "Failed to record a message event.", error);
+            if (event && typeof event.type === "string") {
+                try {
+                    if (event.type === "MESSAGE_DELETE" && this.settings.logDeletes) {
+                        if (this.onDelete(event)) return undefined;
+                    } else if (event.type === "MESSAGE_DELETE_BULK" && this.settings.logDeletes) {
+                        const remaining = this.onBulkDelete(event);
+                        if (remaining.length === 0) return undefined;
+                        if (remaining.length !== (event.ids ?? []).length) args[0] = { ...event, ids: remaining };
+                    } else if (event.type === "MESSAGE_UPDATE" && this.settings.logEdits) this.onUpdate(event);
+                } catch (error) {
+                    BdApi.Logger.error(PLUGIN_NAME, "Failed to record a message event.", error);
+                }
             }
+            return original.apply(instance, args);
         });
+        BdApi.Logger.info(PLUGIN_NAME, `Recording message events. ${this.logs.length} entries stored.`);
         this.patchMenus();
     }
 
@@ -116,6 +137,8 @@ export default class MessageLogger {
         this.dependencyAttempts = 0;
         if (this.saveTimer) this.flush();
         BdApi.Patcher.unpatchAll(PLUGIN_NAME);
+        BdApi.DOM.removeStyle(GHOST_STYLE_ID);
+        this.ghosts = [];
         for (const unpatch of this.unpatches.splice(0)) unpatch();
     }
 
@@ -138,6 +161,13 @@ export default class MessageLogger {
                         id: "logDeletes",
                         name: "Log deleted messages",
                         value: this.settings.logDeletes
+                    },
+                    {
+                        type: "switch",
+                        id: "keepDeletedVisible",
+                        name: "Keep deleted messages visible",
+                        note: "Deleted messages from other people stay in the chat, highlighted, until you reload Discord.",
+                        value: this.settings.keepDeletedVisible
                     },
                     {
                         type: "switch",
@@ -204,24 +234,52 @@ export default class MessageLogger {
             : BdApi.UI.buildSettingsPanel({ settings: categories, onChange });
     }
 
-    private onDelete(event: any) {
+    // Returns true when the deleted message should stay visible in the chat instead of being removed.
+    private onDelete(event: any): boolean {
         const channelId = String(event.channelId ?? event.channel_id ?? "");
         const messageId = String(event.id ?? event.messageId ?? "");
-        if (!channelId || !messageId) return;
+        if (!channelId || !messageId) return false;
         const message = event.message ?? this.messageStore.getMessage(channelId, messageId);
-        if (!message || this.isEphemeral(message) || !this.shouldLog(message, channelId)) return;
+        if (!message || this.isEphemeral(message) || !this.shouldLog(message, channelId)) return false;
         this.add({ kind: "delete", message: this.snapshot(message, channelId), occurredAt: new Date().toISOString() });
+        return this.keepVisible(message, channelId);
     }
 
-    private onBulkDelete(event: any) {
+    private onBulkDelete(event: any): string[] {
         const channelId = String(event.channelId ?? event.channel_id ?? "");
         const ids: unknown[] = event.ids ?? event.messageIds ?? [];
-        if (!channelId || !Array.isArray(ids)) return;
+        if (!channelId || !Array.isArray(ids)) return [];
+        const remaining: string[] = [];
         for (const id of ids) {
             const message = this.messageStore.getMessage(channelId, String(id));
-            if (!message || this.isEphemeral(message) || !this.shouldLog(message, channelId)) continue;
-            this.add({ kind: "delete", message: this.snapshot(message, channelId), occurredAt: new Date().toISOString() });
+            if (message && !this.isEphemeral(message) && this.shouldLog(message, channelId)) {
+                this.add({ kind: "delete", message: this.snapshot(message, channelId), occurredAt: new Date().toISOString() });
+                if (this.keepVisible(message, channelId)) continue;
+            }
+            remaining.push(String(id));
         }
+        return remaining;
+    }
+
+    private keepVisible(message: any, channelId: string): boolean {
+        if (!this.settings.keepDeletedVisible) return false;
+        const currentUser = BdApi.Webpack.getStore("UserStore")?.getCurrentUser?.();
+        if (currentUser && String(message.author?.id) === String(currentUser.id)) return false;
+        this.ghosts.push(`chat-messages-${channelId}-${message.id}`);
+        if (this.ghosts.length > 300) this.ghosts.shift();
+        this.updateGhostStyle();
+        return true;
+    }
+
+    private updateGhostStyle() {
+        BdApi.DOM.removeStyle(GHOST_STYLE_ID);
+        if (this.ghosts.length === 0) return;
+        const selector = this.ghosts.map(id => `[id="${id}"]`);
+        BdApi.DOM.addStyle(
+            GHOST_STYLE_ID,
+            `${selector.join(",")} { background: color-mix(in srgb, var(--status-danger, #f23f42) 12%, transparent) !important; }
+${selector.map(item => `${item} [class*="contents"]::after`).join(",")} { content: "Deleted"; color: var(--status-danger, #f23f42); font-size: 11px; font-weight: 600; margin-left: 8px; }`
+        );
     }
 
     private onUpdate(event: any) {
