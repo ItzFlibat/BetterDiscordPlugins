@@ -1,7 +1,7 @@
 {
     "name": "betterdiscordbadges",
     "description": "Shows client-mod badges from the Alliance badge service on Discord profiles.",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "private": true,
     "main": "BetterDiscordBadges.plugin.js",
     "scripts": {

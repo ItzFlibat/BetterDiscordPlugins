@@ -49,6 +49,8 @@ export default class BetterDiscordBadges {
     private stopped = false;
     private dependencyTimer: ReturnType<typeof setTimeout> | undefined;
     private dependencyAttempts = 0;
+    private patchTimer: ReturnType<typeof setTimeout> | undefined;
+    private patchAttempts = 0;
 
     getName() {
         return PLUGIN_NAME;
@@ -57,7 +59,7 @@ export default class BetterDiscordBadges {
         return "ItzFlibat";
     }
     getVersion() {
-        return "1.1.0";
+        return "1.1.1";
     }
     getDescription() {
         return "Shows client-mod badges from the Alliance badge service on Discord profiles.";
@@ -82,13 +84,8 @@ export default class BetterDiscordBadges {
             SERVICES.map(service => [service.id, service.forced ? true : (saved[service.id] ?? service.enabled)])
         );
         BdApi.Data.save(PLUGIN_NAME, "settings", this.settings);
-        if (!this.installProfilePatch()) {
-            BdApi.Logger.error(
-                PLUGIN_NAME,
-                "Could not find Discord's profile badge renderer. Badges will not appear until Discord updates."
-            );
-            BdApi.UI.showToast("BetterDiscord Badges could not find the profile badge area.", { type: "error" });
-        }
+        this.patchAttempts = 0;
+        this.tryProfilePatch();
         void this.loadBadges();
         this.interval = setInterval(() => void this.loadBadges(), REFRESH_INTERVAL);
     }
@@ -96,6 +93,7 @@ export default class BetterDiscordBadges {
     stop() {
         this.stopped = true;
         if (this.dependencyTimer) clearTimeout(this.dependencyTimer);
+        if (this.patchTimer) clearTimeout(this.patchTimer);
         this.dependencyAttempts = 0;
         this.request?.abort();
         if (this.interval) clearInterval(this.interval);
@@ -141,32 +139,60 @@ export default class BetterDiscordBadges {
             : BdApi.UI.buildSettingsPanel({ settings: categories, onChange });
     }
 
+    private tryProfilePatch() {
+        if (this.stopped || this.patch) return;
+        if (this.installProfilePatch()) return;
+        if (this.patchAttempts++ < 10) {
+            this.patchTimer = setTimeout(() => this.tryProfilePatch(), 3000);
+            return;
+        }
+        BdApi.Logger.error(PLUGIN_NAME, "Could not find Discord's profile badge renderer. Badges will not appear until Discord updates.");
+        BdApi.UI.showToast("BetterDiscord Badges could not find the profile badge area.", { type: "error" });
+    }
+
     private installProfilePatch(): boolean {
-        const find = (module: any) =>
-            module &&
-            typeof module === "object" &&
-            Object.keys(module).some(key => {
-                const value = module[key];
-                return (
-                    typeof value === "function" && (String(value).includes("PROFILE_USER_BADGES") || String(value).includes("USER_BADGES"))
-                );
-            });
-        const pair = BdApi.Webpack.getWithKey(find, { searchExports: true });
+        // Discord compiles intl keys to hashes, so PROFILE_USER_BADGES never appears in source. The badge list
+        // component renders badge objects through their iconSrc, so match on that instead.
+        const source = (value: any): string => {
+            try {
+                return Function.prototype.toString.call(value);
+            } catch {
+                return "";
+            }
+        };
+        const looksLikeBadgeList = (code: string) => code.includes("iconSrc") && /aria-label|ariaLabel|forceOpen|ariaHidden/.test(code);
+        const resolve = (value: any): { target: any; key: string } | undefined => {
+            if (typeof value === "function") return undefined;
+            if (value && typeof value === "object") {
+                if (typeof value.type === "function" && looksLikeBadgeList(source(value.type))) return { target: value, key: "type" };
+                if (typeof value.render === "function" && looksLikeBadgeList(source(value.render))) return { target: value, key: "render" };
+            }
+            return undefined;
+        };
+        const filter = (value: any) =>
+            (typeof value === "function" && looksLikeBadgeList(source(value))) ||
+            (value && typeof value === "object" && Boolean(resolve(value)));
+        const pair = BdApi.Webpack.getWithKey(filter, { searchExports: true });
         if (!pair || !pair[0] || !pair[1]) return false;
-        const [module, key] = pair;
+        let [module, key] = pair;
+        const inner = resolve(module[key]);
+        if (inner) {
+            module = inner.target;
+            key = inner.key;
+        }
         this.patch = BdApi.Patcher.after(PLUGIN_NAME, module, key, (_: unknown, args: any[], result: any) => {
             const userId = this.findUserId(args);
             if (!userId || !result) return result;
             const badges = this.makeElements(userId);
             if (badges.length === 0) return result;
-            if (!this.appendToBadgeRow(result, badges)) {
-                if (this.warned) return result;
+            const updated = this.appendToBadgeRow(result, badges);
+            if (updated) return updated;
+            if (!this.warned) {
                 this.warned = true;
                 BdApi.Logger.warn(PLUGIN_NAME, "The profile badge layout changed; using a fallback placement.");
-                const children = Array.isArray(result.props?.children) ? result.props.children.slice() : [result.props?.children];
-                result = BdApi.React.cloneElement(result, {}, ...children.filter(Boolean), this.makeRow(badges));
             }
-            return result;
+            const children = Array.isArray(result.props?.children) ? result.props.children.slice() : [result.props?.children];
+            return BdApi.React.cloneElement(result, {}, ...children.filter(Boolean), this.makeRow(badges));
         });
         return true;
     }
@@ -255,7 +281,7 @@ export default class BetterDiscordBadges {
         );
     }
 
-    private appendToBadgeRow(root: any, badges: any[]): boolean {
+    private appendToBadgeRow(root: any, badges: any[]): any {
         const visit = (node: any, depth: number): any => {
             if (!node || typeof node !== "object" || depth > 20) return node;
             if (Array.isArray(node)) return node.map(item => visit(item, depth + 1));
@@ -292,8 +318,8 @@ export default class BetterDiscordBadges {
                     : Boolean(value?.type === "img" || (value?.props?.src && (value?.props?.alt || value?.props?.["aria-label"])));
             return (/badge/.test(own) && (hasImage(children) || /profile.*badge/.test(own))) || hasBadgeRow(children, depth + 1);
         };
-        if (!hasBadgeRow(root, 0)) return false;
-        visit(root, 0);
-        return true;
+        if (!hasBadgeRow(root, 0)) return null;
+        const updated = visit(root, 0);
+        return updated;
     }
 }
