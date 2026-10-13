@@ -498,14 +498,14 @@ class ShowHiddenChannels {
   dependencyAttempts = 0;
   start() {
     if (this.started) return;
-    const library = window.YACBDPLibrary;
+    const library = window.YACBDP;
     if (!library?.requirePlugin?.(config_namespaceObject.UU)) {
       if (this.dependencyAttempts++ < 20) {
         this.dependencyTimer = setTimeout(() => {
           if (this.api.Plugins.isEnabled(config_namespaceObject.UU)) this.start();
         }, 500);
       } else {
-        this.api.UI.showToast("ShowHiddenChannels requires the enabled YACBDP Library plugin.", {
+        this.api.UI.showToast("ShowHiddenChannels requires the enabled YACBDP plugin.", {
           type: "error"
         });
       }
@@ -820,47 +820,50 @@ class ShowHiddenChannels {
       value: this.settings[id]
     });
     const guilds = this.modules?.GuildStore.getGuilds() ?? BdApi.Webpack.getStore("GuildStore")?.getGuilds() ?? {};
-    return this.api.UI.buildSettingsPanel({
-      settings: [{
-        type: "category",
-        id: "general",
-        name: "Appearance and information",
-        collapsible: true,
-        shown: true,
-        settings: [select("hiddenChannelIcon", "Hidden channel icon", "Choose the indicator shown beside hidden channels.", [["Lock", "lock"], ["Hidden eye", "eye"], ["None", "none"]]), select("sort", "Channel order", "Choose where hidden channels appear.", [["Discord order", "native"], ["Bottom of each category", "bottom"], ["Separate Hidden Channels category", "extra"]]), toggle("mutedStyle", "Muted appearance", "Dim hidden channels in the channel list."), toggle("hideUnreads", "Hide unread indicators", "Suppress unread counts and mentions for displayed hidden channels."), toggle("shouldShowEmptyCategory", "Show empty categories", "Keep empty categories visible."), toggle("showPerms", "Show permissions", "Show roles, known members and permission overrides."), select("showAdmin", "Administrator roles", "Choose which administrator roles appear in channel information.", [["Channel overrides only", "channel"], ["All administrators", "always"], ["Exclude bot administrators", "exclude"], ["None", "never"]]), toggle("showLastMessage", "Last message timestamp", "Show the timestamp only when its ID is already available."), toggle("debugMode", "Debug logging", "Log module availability when the plugin starts.")]
-      }, {
-        type: "category",
-        id: "channels",
-        name: "Channel types",
-        collapsible: true,
-        shown: false,
-        settings: Object.values(channelTypes).map(id => ({
-          type: "switch",
-          id,
-          name: id.replace("GUILD_", "").toLowerCase().replace(/_/g, " ").replace(/^./, letter => letter.toUpperCase()),
-          value: this.settings.channels[id]
-        }))
-      }, {
-        type: "category",
-        id: "blacklistedGuilds",
-        name: "Excluded servers",
-        collapsible: true,
-        shown: false,
-        settings: Object.values(guilds).sort((a, b) => a.name.localeCompare(b.name)).map(guild => ({
-          type: "switch",
-          id: guild.id,
-          name: guild.name,
-          note: "Hide hidden channels in this server.",
-          value: !!this.settings.blacklistedGuilds[guild.id]
-        }))
-      }],
-      onChange: (category, id, value) => {
-        if (category === "channels" || category === "blacklistedGuilds") this.settings[category][id] = !!value;else this.settings = loadSettings({
-          ...this.settings,
-          [id]: value
-        });
-        this.saveSettings();
-      }
+    const categories = [{
+      type: "category",
+      id: "general",
+      name: "Appearance and information",
+      collapsible: true,
+      shown: true,
+      settings: [select("hiddenChannelIcon", "Hidden channel icon", "Choose the indicator shown beside hidden channels.", [["Lock", "lock"], ["Hidden eye", "eye"], ["None", "none"]]), select("sort", "Channel order", "Choose where hidden channels appear.", [["Discord order", "native"], ["Bottom of each category", "bottom"], ["Separate Hidden Channels category", "extra"]]), toggle("mutedStyle", "Muted appearance", "Dim hidden channels in the channel list."), toggle("hideUnreads", "Hide unread indicators", "Suppress unread counts and mentions for displayed hidden channels."), toggle("shouldShowEmptyCategory", "Show empty categories", "Keep empty categories visible."), toggle("showPerms", "Show permissions", "Show roles, known members and permission overrides."), select("showAdmin", "Administrator roles", "Choose which administrator roles appear in channel information.", [["Channel overrides only", "channel"], ["All administrators", "always"], ["Exclude bot administrators", "exclude"], ["None", "never"]]), toggle("showLastMessage", "Last message timestamp", "Show the timestamp only when its ID is already available."), toggle("debugMode", "Debug logging", "Log module availability when the plugin starts.")]
+    }, {
+      type: "category",
+      id: "channels",
+      name: "Channel types",
+      collapsible: true,
+      shown: false,
+      settings: Object.values(channelTypes).map(id => ({
+        type: "switch",
+        id,
+        name: id.replace("GUILD_", "").toLowerCase().replace(/_/g, " ").replace(/^./, letter => letter.toUpperCase()),
+        value: this.settings.channels[id]
+      }))
+    }, {
+      type: "category",
+      id: "blacklistedGuilds",
+      name: "Excluded servers",
+      collapsible: true,
+      shown: false,
+      settings: Object.values(guilds).sort((a, b) => a.name.localeCompare(b.name)).map(guild => ({
+        type: "switch",
+        id: guild.id,
+        name: guild.name,
+        note: "Hide hidden channels in this server.",
+        value: !!this.settings.blacklistedGuilds[guild.id]
+      }))
+    }];
+    const onChange = (category, id, value) => {
+      if (category === "channels" || category === "blacklistedGuilds") this.settings[category][id] = !!value;else this.settings = loadSettings({
+        ...this.settings,
+        [id]: value
+      });
+      this.saveSettings();
+    };
+    const library = window.YACBDP;
+    return library?.buildSettingsPanel ? library.buildSettingsPanel(config_namespaceObject.UU, categories, onChange) : this.api.UI.buildSettingsPanel({
+      settings: categories,
+      onChange
     });
   }
 }

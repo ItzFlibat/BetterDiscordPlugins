@@ -64,14 +64,14 @@ export default class BetterDiscordBadges {
     }
 
     start() {
-        const library = (window as any).YACBDPLibrary;
+        const library = (window as any).YACBDP;
         if (!library?.requirePlugin?.(PLUGIN_NAME)) {
             if (this.dependencyAttempts++ < 20) {
                 this.dependencyTimer = setTimeout(() => {
                     if (BdApi.Plugins.isEnabled(PLUGIN_NAME)) this.start();
                 }, 500);
             } else {
-                BdApi.UI.showToast("BetterDiscordBadges requires the enabled YACBDP Library plugin.", { type: "error" });
+                BdApi.UI.showToast("BetterDiscordBadges requires the enabled YACBDP plugin.", { type: "error" });
             }
             return;
         }
@@ -104,20 +104,41 @@ export default class BetterDiscordBadges {
     }
 
     getSettingsPanel() {
-        return BdApi.UI.buildSettingsPanel({
-            settings: SERVICES.map(service => ({
-                type: "switch",
-                id: service.id,
-                name: `Show ${service.name} badges`,
-                value: service.forced ? true : this.settings[service.id],
-                disabled: Boolean(service.forced),
-                onChange: (value: boolean) => {
-                    if (service.forced) return;
-                    this.settings[service.id] = value;
-                    BdApi.Data.save(PLUGIN_NAME, "settings", this.settings);
-                }
-            }))
+        const setting = (service: Service) => ({
+            type: "switch",
+            id: service.id,
+            name: `Show ${service.name} badges`,
+            value: service.forced ? true : this.settings[service.id],
+            disabled: Boolean(service.forced)
         });
+        const categories = [
+            {
+                type: "category",
+                id: "required",
+                name: "Always shown",
+                collapsible: true,
+                shown: true,
+                settings: SERVICES.filter(service => service.forced).map(setting)
+            },
+            {
+                type: "category",
+                id: "clients",
+                name: "Client badges",
+                collapsible: true,
+                shown: true,
+                settings: SERVICES.filter(service => !service.forced).map(setting)
+            }
+        ];
+        const onChange = (_category: string, id: string, value: boolean) => {
+            const service = SERVICES.find(item => item.id === id);
+            if (!service || service.forced) return;
+            this.settings[id] = value;
+            BdApi.Data.save(PLUGIN_NAME, "settings", this.settings);
+        };
+        const library = (window as any).YACBDP;
+        return library?.buildSettingsPanel
+            ? library.buildSettingsPanel(PLUGIN_NAME, categories, onChange)
+            : BdApi.UI.buildSettingsPanel({ settings: categories, onChange });
     }
 
     private installProfilePatch(): boolean {

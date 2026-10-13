@@ -7,7 +7,7 @@ MessageLogger keeps a local history of deleted messages and message edits that D
 1. Download [MessageLogger.plugin.js](https://raw.githubusercontent.com/ItzFlibat/BetterDiscordPlugins/refs/heads/main/Plugins/MessageLogger/MessageLogger.plugin.js).
 2. In Discord, open **Settings → BetterDiscord → Plugins → Open Plugins Folder**.
 3. Place the file in that folder and enable **MessageLogger**.
-4. Install and enable [YACBDP Library](../YACBDPLibrary/README.md) first; this plugin requires it.
+4. Install and enable [YACBDP](../YACBDP/README.md) first; this plugin requires it.
 
 ## Features and settings
 

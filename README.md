@@ -11,7 +11,7 @@ Yet Another Collection of BetterDiscord Plugins
 
 | Plugin | Description | Documentation | Download |
 | --- | --- | --- | --- |
-| YACBDP Library | Shared runtime and a dashboard for managing this collection. | [README](Plugins/YACBDPLibrary/README.md) | [YACBDPLibrary.plugin.js](https://raw.githubusercontent.com/ItzFlibat/BetterDiscordPlugins/refs/heads/main/Plugins/YACBDPLibrary/YACBDPLibrary.plugin.js) |
+| YACBDP | Shared runtime and a dashboard for managing this collection. | [README](Plugins/YACBDP/README.md) | [YACBDP.plugin.js](https://raw.githubusercontent.com/ItzFlibat/BetterDiscordPlugins/refs/heads/main/Plugins/YACBDP/YACBDP.plugin.js) |
 | ShowHiddenChannels | Show hidden channels and inspect the channel information available to your Discord client. | [README](Plugins/ShowHiddenChannels/README.md) | [ShowHiddenChannels.plugin.js](https://raw.githubusercontent.com/ItzFlibat/BetterDiscordPlugins/refs/heads/main/Plugins/ShowHiddenChannels/ShowHiddenChannels.plugin.js) |
 | MessageLogger | Locally records deleted messages and message edits for review. | [README](Plugins/MessageLogger/README.md) | [MessageLogger.plugin.js](https://raw.githubusercontent.com/ItzFlibat/BetterDiscordPlugins/refs/heads/main/Plugins/MessageLogger/MessageLogger.plugin.js) |
 | BetterDiscordBadges | Shows client-mod badges on profiles with source toggles. | [README](Plugins/BetterDiscordBadges/README.md) | [BetterDiscordBadges.plugin.js](https://raw.githubusercontent.com/ItzFlibat/BetterDiscordPlugins/refs/heads/main/Plugins/BetterDiscordBadges/BetterDiscordBadges.plugin.js) |
@@ -20,8 +20,8 @@ Yet Another Collection of BetterDiscord Plugins
 
 1. Install [BetterDiscord](https://betterdiscord.app/).
 2. In Discord, open **Settings → BetterDiscord → Plugins → Open Plugins Folder**.
-3. Download [YACBDPLibrary.plugin.js](https://raw.githubusercontent.com/ItzFlibat/BetterDiscordPlugins/refs/heads/main/Plugins/YACBDPLibrary/YACBDPLibrary.plugin.js), place it in that folder, and enable it.
-4. Download the `.plugin.js` file for the plugin you want, place it in the same folder, and enable it. Leave YACBDP Library enabled.
+3. Download [YACBDP.plugin.js](https://raw.githubusercontent.com/ItzFlibat/BetterDiscordPlugins/refs/heads/main/Plugins/YACBDP/YACBDP.plugin.js), place it in that folder, and enable it.
+4. Download the `.plugin.js` file for the plugin you want, place it in the same folder, and enable it. Leave YACBDP enabled.
 
 Check the plugin’s README for its own features, settings, requirements, and limitations. Repository source, development dependencies, and build output are for contributors; install the standalone `.plugin.js` file.
 
@@ -40,8 +40,8 @@ bun run build:messagelogger
 bun run build:betterdiscordbadges
 bun run check:messagelogger
 bun run check:betterdiscordbadges
-bun run build:yacbdplibrary
-bun run check:yacbdplibrary
+bun run build:yacbdp
+bun run check:yacbdp
 ```
 
 The ShowHiddenChannels check type-checks, builds, and runs its regression tests. The other plugins have build and type-check commands. Each standalone plugin build is written to its folder and to `dist/`.

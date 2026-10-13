@@ -1,10 +1,10 @@
 {
-    "name": "YACBDPLibrary",
-    "displayName": "YACBDP Library",
+    "name": "YACBDP",
+    "displayName": "YACBDP",
     "version": "1.0.0",
     "author": "ItzFlibat",
     "authorId": "619203349954166804",
-    "source": "https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/YACBDPLibrary",
+    "source": "https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/YACBDP",
     "website": "https://flibat.com",
     "description": "Shared runtime and plugin dashboard for Yet Another Collection of BetterDiscord Plugins."
 }

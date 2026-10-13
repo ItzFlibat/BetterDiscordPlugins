@@ -1,9 +1,9 @@
 {
-    "name": "yacbdplibrary",
+    "name": "yacbdp",
     "description": "Shared runtime and plugin dashboard for Yet Another Collection of BetterDiscord Plugins.",
     "version": "1.0.0",
     "private": true,
-    "main": "YACBDPLibrary.plugin.js",
+    "main": "YACBDP.plugin.js",
     "scripts": {
         "build": "bun run typecheck && bun run webpack",
         "typecheck": "tsc --noEmit",

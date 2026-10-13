@@ -5,7 +5,7 @@
         "Plugins/ShowHiddenChannels",
         "Plugins/MessageLogger",
         "Plugins/BetterDiscordBadges",
-        "Plugins/YACBDPLibrary"
+        "Plugins/YACBDP"
     ],
     "scripts": {
         "check:showhiddenchannels": "bun run --cwd Plugins/ShowHiddenChannels check",
@@ -14,8 +14,8 @@
         "build:betterdiscordbadges": "bun run --cwd Plugins/BetterDiscordBadges build",
         "check:messagelogger": "bun run --cwd Plugins/MessageLogger typecheck",
         "check:betterdiscordbadges": "bun run --cwd Plugins/BetterDiscordBadges typecheck",
-        "build:yacbdplibrary": "bun run --cwd Plugins/YACBDPLibrary build",
-        "check:yacbdplibrary": "bun run --cwd Plugins/YACBDPLibrary typecheck"
+        "build:yacbdp": "bun run --cwd Plugins/YACBDP build",
+        "check:yacbdp": "bun run --cwd Plugins/YACBDP typecheck"
     },
     "devDependencies": {
         "prettier": "^3.9.10"

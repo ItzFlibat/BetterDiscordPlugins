@@ -66,14 +66,14 @@ export default class MessageLogger {
     }
 
     start() {
-        const library = (window as any).YACBDPLibrary;
+        const library = (window as any).YACBDP;
         if (!library?.requirePlugin?.(PLUGIN_NAME)) {
             if (this.dependencyAttempts++ < 20) {
                 this.dependencyTimer = setTimeout(() => {
                     if (BdApi.Plugins.isEnabled(PLUGIN_NAME)) this.start();
                 }, 500);
             } else {
-                BdApi.UI.showToast("MessageLogger requires the enabled YACBDP Library plugin.", { type: "error" });
+                BdApi.UI.showToast("MessageLogger requires the enabled YACBDP plugin.", { type: "error" });
             }
             return;
         }
@@ -114,71 +114,85 @@ export default class MessageLogger {
         const save = (key: keyof Settings, value: unknown) => {
             this.settings = { ...this.settings, [key]: value };
             BdApi.Data.save(PLUGIN_NAME, SETTINGS_KEY, this.settings);
+            this.prune();
         };
-        return BdApi.UI.buildSettingsPanel({
-            settings: [
-                {
-                    type: "switch",
-                    id: "logDeletes",
-                    name: "Log deleted messages",
-                    value: this.settings.logDeletes,
-                    onChange: (v: boolean) => save("logDeletes", v)
-                },
-                {
-                    type: "switch",
-                    id: "logEdits",
-                    name: "Keep message edit history",
-                    value: this.settings.logEdits,
-                    onChange: (v: boolean) => save("logEdits", v)
-                },
-                {
-                    type: "switch",
-                    id: "logDirectMessages",
-                    name: "Include direct messages",
-                    value: this.settings.logDirectMessages,
-                    onChange: (v: boolean) => save("logDirectMessages", v)
-                },
-                {
-                    type: "switch",
-                    id: "ignoreBots",
-                    name: "Ignore messages from bots",
-                    value: this.settings.ignoreBots,
-                    onChange: (v: boolean) => save("ignoreBots", v)
-                },
-                {
-                    type: "textbox",
-                    id: "ignoredUserIds",
-                    name: "Ignored user IDs (comma separated)",
-                    value: this.settings.ignoredUserIds,
-                    onChange: (v: string) => save("ignoredUserIds", v)
-                },
-                {
-                    type: "textbox",
-                    id: "ignoredChannelIds",
-                    name: "Ignored channel IDs (comma separated)",
-                    value: this.settings.ignoredChannelIds,
-                    onChange: (v: string) => save("ignoredChannelIds", v)
-                },
-                {
-                    type: "number",
-                    id: "retentionDays",
-                    name: "Keep entries for days (0 = forever)",
-                    value: this.settings.retentionDays,
-                    min: 0,
-                    max: 3650,
-                    onChange: (v: number) => save("retentionDays", v)
-                },
-                {
-                    type: "number",
-                    id: "maxEntries",
-                    name: "Maximum stored entries",
-                    value: this.settings.maxEntries,
-                    min: 100,
-                    max: 50000,
-                    onChange: (v: number) => save("maxEntries", v)
-                }
-            ]
-        });
+        const categories = [
+            {
+                type: "category",
+                id: "logging",
+                name: "Logging",
+                collapsible: true,
+                shown: true,
+                settings: [
+                    {
+                        type: "switch",
+                        id: "logDeletes",
+                        name: "Log deleted messages",
+                        value: this.settings.logDeletes
+                    },
+                    {
+                        type: "switch",
+                        id: "logEdits",
+                        name: "Keep message edit history",
+                        value: this.settings.logEdits
+                    },
+                    {
+                        type: "switch",
+                        id: "logDirectMessages",
+                        name: "Include direct messages",
+                        value: this.settings.logDirectMessages
+                    },
+                    {
+                        type: "switch",
+                        id: "ignoreBots",
+                        name: "Ignore messages from bots",
+                        value: this.settings.ignoreBots
+                    }
+                ]
+            },
+            {
+                type: "category",
+                id: "filters",
+                name: "Filters and storage",
+                collapsible: true,
+                shown: false,
+                settings: [
+                    {
+                        type: "textbox",
+                        id: "ignoredUserIds",
+                        name: "Ignored user IDs (comma separated)",
+                        value: this.settings.ignoredUserIds
+                    },
+                    {
+                        type: "textbox",
+                        id: "ignoredChannelIds",
+                        name: "Ignored channel IDs (comma separated)",
+                        value: this.settings.ignoredChannelIds
+                    },
+                    {
+                        type: "number",
+                        id: "retentionDays",
+                        name: "Keep entries for days (0 = forever)",
+                        value: this.settings.retentionDays,
+                        min: 0,
+                        max: 3650
+                    },
+                    {
+                        type: "number",
+                        id: "maxEntries",
+                        name: "Maximum stored entries",
+                        value: this.settings.maxEntries,
+                        min: 100,
+                        max: 50000
+                    }
+                ]
+            }
+        ];
+        const onChange = (_category: string, id: string, value: unknown) => save(id as keyof Settings, value);
+        const library = (window as any).YACBDP;
+        return library?.buildSettingsPanel
+            ? library.buildSettingsPanel(PLUGIN_NAME, categories, onChange)
+            : BdApi.UI.buildSettingsPanel({ settings: categories, onChange });
     }
 
     private onDelete(event: any) {

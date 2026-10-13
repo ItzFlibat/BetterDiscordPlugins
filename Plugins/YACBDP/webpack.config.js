@@ -9,7 +9,7 @@ module.exports = {
     devtool: false,
     entry: "./src/index.tsx",
     output: {
-        filename: "YACBDPLibrary.plugin.js",
+        filename: "YACBDP.plugin.js",
         path: path.join(__dirname, "dist"),
         library: { type: "commonjs2", export: "default" }
     },
@@ -40,11 +40,11 @@ module.exports = {
         }),
         {
             apply(compiler) {
-                compiler.hooks.afterEmit.tap("YACBDPLibrary", () => {
-                    const outputPath = path.join(__dirname, "dist/YACBDPLibrary.plugin.js");
+                compiler.hooks.afterEmit.tap("YACBDP", () => {
+                    const outputPath = path.join(__dirname, "dist/YACBDP.plugin.js");
                     const content = fs.readFileSync(outputPath, "utf8").replace(/[\t ]+$/gm, "");
                     fs.writeFileSync(outputPath, content);
-                    fs.writeFileSync(path.join(__dirname, "YACBDPLibrary.plugin.js"), content);
+                    fs.writeFileSync(path.join(__dirname, "YACBDP.plugin.js"), content);
                 });
             }
         }

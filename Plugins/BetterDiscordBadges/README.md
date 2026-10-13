@@ -7,7 +7,7 @@ BetterDiscordBadges shows client-mod badges on Discord user profiles using the f
 1. Download [BetterDiscordBadges.plugin.js](https://raw.githubusercontent.com/ItzFlibat/BetterDiscordPlugins/refs/heads/main/Plugins/BetterDiscordBadges/BetterDiscordBadges.plugin.js).
 2. In Discord, open **Settings → BetterDiscord → Plugins → Open Plugins Folder**.
 3. Place the file in that folder and enable **BetterDiscordBadges**.
-4. Install and enable [YACBDP Library](../YACBDPLibrary/README.md) first; this plugin requires it.
+4. Install and enable [YACBDP](../YACBDP/README.md) first; this plugin requires it.
 
 ## Settings
 

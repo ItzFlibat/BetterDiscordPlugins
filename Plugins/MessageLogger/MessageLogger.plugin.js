@@ -66,14 +66,14 @@ class MessageLogger {
     return "Locally records deleted messages and message edits for review in BetterDiscord.";
   }
   start() {
-    const library = window.YACBDPLibrary;
+    const library = window.YACBDP;
     if (!library?.requirePlugin?.(PLUGIN_NAME)) {
       if (this.dependencyAttempts++ < 20) {
         this.dependencyTimer = setTimeout(() => {
           if (BdApi.Plugins.isEnabled(PLUGIN_NAME)) this.start();
         }, 500);
       } else {
-        BdApi.UI.showToast("MessageLogger requires the enabled YACBDP Library plugin.", {
+        BdApi.UI.showToast("MessageLogger requires the enabled YACBDP plugin.", {
           type: "error"
         });
       }
@@ -119,61 +119,72 @@ class MessageLogger {
         [key]: value
       };
       BdApi.Data.save(PLUGIN_NAME, SETTINGS_KEY, this.settings);
+      this.prune();
     };
-    return BdApi.UI.buildSettingsPanel({
+    const categories = [{
+      type: "category",
+      id: "logging",
+      name: "Logging",
+      collapsible: true,
+      shown: true,
       settings: [{
         type: "switch",
         id: "logDeletes",
         name: "Log deleted messages",
-        value: this.settings.logDeletes,
-        onChange: v => save("logDeletes", v)
+        value: this.settings.logDeletes
       }, {
         type: "switch",
         id: "logEdits",
         name: "Keep message edit history",
-        value: this.settings.logEdits,
-        onChange: v => save("logEdits", v)
+        value: this.settings.logEdits
       }, {
         type: "switch",
         id: "logDirectMessages",
         name: "Include direct messages",
-        value: this.settings.logDirectMessages,
-        onChange: v => save("logDirectMessages", v)
+        value: this.settings.logDirectMessages
       }, {
         type: "switch",
         id: "ignoreBots",
         name: "Ignore messages from bots",
-        value: this.settings.ignoreBots,
-        onChange: v => save("ignoreBots", v)
-      }, {
+        value: this.settings.ignoreBots
+      }]
+    }, {
+      type: "category",
+      id: "filters",
+      name: "Filters and storage",
+      collapsible: true,
+      shown: false,
+      settings: [{
         type: "textbox",
         id: "ignoredUserIds",
         name: "Ignored user IDs (comma separated)",
-        value: this.settings.ignoredUserIds,
-        onChange: v => save("ignoredUserIds", v)
+        value: this.settings.ignoredUserIds
       }, {
         type: "textbox",
         id: "ignoredChannelIds",
         name: "Ignored channel IDs (comma separated)",
-        value: this.settings.ignoredChannelIds,
-        onChange: v => save("ignoredChannelIds", v)
+        value: this.settings.ignoredChannelIds
       }, {
         type: "number",
         id: "retentionDays",
         name: "Keep entries for days (0 = forever)",
         value: this.settings.retentionDays,
         min: 0,
-        max: 3650,
-        onChange: v => save("retentionDays", v)
+        max: 3650
       }, {
         type: "number",
         id: "maxEntries",
         name: "Maximum stored entries",
         value: this.settings.maxEntries,
         min: 100,
-        max: 50000,
-        onChange: v => save("maxEntries", v)
+        max: 50000
       }]
+    }];
+    const onChange = (_category, id, value) => save(id, value);
+    const library = window.YACBDP;
+    return library?.buildSettingsPanel ? library.buildSettingsPanel(PLUGIN_NAME, categories, onChange) : BdApi.UI.buildSettingsPanel({
+      settings: categories,
+      onChange
     });
   }
   onDelete(event) {

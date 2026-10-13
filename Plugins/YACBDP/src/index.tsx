@@ -5,9 +5,10 @@ interface ManagedPlugin {
     description: string;
 }
 
-const PLUGIN_NAME = "YACBDPLibrary";
+const PLUGIN_NAME = "YACBDP";
+type SettingsCategory = { id: string; name: string; settings: any[]; shown?: boolean; collapsible?: boolean };
 const MANAGED_PLUGINS: ManagedPlugin[] = [
-    { id: "YACBDPLibrary", name: "YACBDP Library", version: "1.0.0", description: "Shared library and plugin dashboard." },
+    { id: "YACBDP", name: "YACBDP", version: "1.0.0", description: "Shared settings and plugin dashboard." },
     {
         id: "ShowHiddenChannels",
         name: "Show Hidden Channels",
@@ -88,7 +89,7 @@ class PluginDashboard extends BdApi.React.Component<any, { tab: string; refresh:
                         style={{ width: 64, height: 64, borderRadius: "50%" }}
                     />
                     <div>
-                        <h1 style={{ margin: 0 }}>YACBDP Plugins</h1>
+                        <h1 style={{ margin: 0 }}>YACBDP</h1>
                         <a href="https://github.com/ItzFlibat" target="_blank" rel="noreferrer">
                             @ItzFlibat on GitHub
                         </a>
@@ -96,7 +97,7 @@ class PluginDashboard extends BdApi.React.Component<any, { tab: string; refresh:
                 </header>
                 <nav style={{ display: "flex", gap: 8, borderBottom: "1px solid var(--background-modifier-accent)", paddingBottom: 12 }}>
                     <button onClick={() => this.setState({ tab: "plugins" })} aria-selected={this.state.tab === "plugins"}>
-                        YACBDP Plugins
+                        Plugins
                     </button>
                     <button onClick={() => this.setState({ tab: "about" })} aria-selected={this.state.tab === "about"}>
                         About
@@ -112,8 +113,8 @@ class PluginDashboard extends BdApi.React.Component<any, { tab: string; refresh:
                     </section>
                 ) : (
                     <section>
-                        <h2>YACBDP Library</h2>
-                        <p>This plugin provides the shared runtime required by the plugins in this collection.</p>
+                        <h2>YACBDP</h2>
+                        <p>This plugin provides shared settings and the plugin dashboard for this collection.</p>
                         <p>
                             Website:{" "}
                             <a href="https://flibat.com" target="_blank" rel="noreferrer">
@@ -139,7 +140,7 @@ class PluginDashboard extends BdApi.React.Component<any, { tab: string; refresh:
     }
 }
 
-export default class YACBDPLibrary {
+export default class YACBDP {
     private api = new BdApi(PLUGIN_NAME);
 
     getName() {
@@ -156,19 +157,35 @@ export default class YACBDPLibrary {
     }
 
     start() {
-        (window as any).YACBDPLibrary = {
+        (window as any).YACBDP = {
             version: "1.0.0",
             requirePlugin: (name: string) => {
                 const library = this.api.Plugins.get(PLUGIN_NAME);
                 const available = Boolean(library && this.api.Plugins.isEnabled(PLUGIN_NAME));
-                if (!available) this.api.UI.showToast(`${name} requires the YACBDP Library plugin to be enabled.`, { type: "error" });
+                if (!available) this.api.UI.showToast(`${name} requires the YACBDP plugin to be enabled.`, { type: "error" });
                 return available;
+            },
+            buildSettingsPanel: (
+                pluginName: string,
+                categories: SettingsCategory[],
+                onChange: (category: string, id: string, value: unknown) => void
+            ) => {
+                const drawerStates = this.api.Data.load(pluginName, "settings-drawers") ?? {};
+                return this.api.UI.buildSettingsPanel({
+                    settings: categories.map(category => ({ ...category, type: "category", collapsible: category.collapsible ?? true })),
+                    onChange,
+                    getDrawerState: (id: string, defaultShown: boolean) => drawerStates[id] ?? defaultShown,
+                    onDrawerToggle: (id: string, shown: boolean) => {
+                        drawerStates[id] = shown;
+                        this.api.Data.save(pluginName, "settings-drawers", drawerStates);
+                    }
+                });
             }
         };
     }
 
     stop() {
-        if ((window as any).YACBDPLibrary?.version === "1.0.0") delete (window as any).YACBDPLibrary;
+        if ((window as any).YACBDP?.version === "1.0.0") delete (window as any).YACBDP;
     }
 
     getSettingsPanel() {

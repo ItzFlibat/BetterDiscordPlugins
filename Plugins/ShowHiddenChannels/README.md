@@ -25,14 +25,14 @@
 - Server exclusions in settings and the server context menu.
 - Channel context actions to inspect information or copy channel details.
 - Settings apply immediately, and existing plugin settings are migrated automatically.
-- Requires the shared YACBDP Library plugin.
+- Requires the shared YACBDP plugin.
 
 ## How to install
 
 1. Download [ShowHiddenChannels.plugin.js](https://raw.githubusercontent.com/ItzFlibat/BetterDiscordPlugins/refs/heads/main/Plugins/ShowHiddenChannels/ShowHiddenChannels.plugin.js).
 2. In Discord, open **Settings → BetterDiscord → Plugins → Open Plugins Folder**.
 3. Place the downloaded file in the plugins folder and enable **ShowHiddenChannels**.
-4. Install and enable [YACBDP Library](../YACBDPLibrary/README.md) first; this plugin requires it.
+4. Install and enable [YACBDP](../YACBDP/README.md) first; this plugin requires it.
 
 Right-click a displayed hidden channel and choose **Hidden channel information** for its details. Opening a hidden text channel displays the information page. Selecting a hidden voice or stage channel shows its details without joining the call.
 

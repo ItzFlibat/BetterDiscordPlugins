@@ -1,10 +1,10 @@
 /**
- * @name YACBDPLibrary
- * @displayName YACBDP Library
+ * @name YACBDP
+ * @displayName YACBDP
  * @version 1.0.0
  * @author ItzFlibat
  * @authorId 619203349954166804
- * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/YACBDPLibrary
+ * @source https://github.com/ItzFlibat/BetterDiscordPlugins/tree/main/Plugins/YACBDP
  * @website https://flibat.com
  * @description Shared runtime and plugin dashboard for Yet Another Collection of BetterDiscord Plugins.
  */
@@ -30,14 +30,14 @@
 /************************************************************************/
 let __webpack_exports__ = {};
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   "default": () => (/* binding */ YACBDPLibrary)
+/* harmony export */   "default": () => (/* binding */ YACBDP)
 /* harmony export */ });
-const PLUGIN_NAME = "YACBDPLibrary";
+const PLUGIN_NAME = "YACBDP";
 const MANAGED_PLUGINS = [{
-  id: "YACBDPLibrary",
-  name: "YACBDP Library",
+  id: "YACBDP",
+  name: "YACBDP",
   version: "1.0.0",
-  description: "Shared library and plugin dashboard."
+  description: "Shared settings and plugin dashboard."
 }, {
   id: "ShowHiddenChannels",
   name: "Show Hidden Channels",
@@ -148,7 +148,7 @@ class PluginDashboard extends BdApi.React.Component {
       style: {
         margin: 0
       }
-    }, "YACBDP Plugins"), BdApi.React.createElement("a", {
+    }, "YACBDP"), BdApi.React.createElement("a", {
       href: "https://github.com/ItzFlibat",
       target: "_blank",
       rel: "noreferrer"
@@ -164,12 +164,12 @@ class PluginDashboard extends BdApi.React.Component {
         tab: "plugins"
       }),
       "aria-selected": this.state.tab === "plugins"
-    }, "YACBDP Plugins"), BdApi.React.createElement("button", {
+    }, "Plugins"), BdApi.React.createElement("button", {
       onClick: () => this.setState({
         tab: "about"
       }),
       "aria-selected": this.state.tab === "about"
-    }, "About")), this.state.tab === "plugins" ? BdApi.React.createElement("section", null, BdApi.React.createElement("p", null, "Manage your BetterDiscord plugins from one place. Install each plugin file into your BetterDiscord plugins folder. The shared library is required and stays enabled."), MANAGED_PLUGINS.map(plugin => this.renderPlugin(plugin))) : BdApi.React.createElement("section", null, BdApi.React.createElement("h2", null, "YACBDP Library"), BdApi.React.createElement("p", null, "This plugin provides the shared runtime required by the plugins in this collection."), BdApi.React.createElement("p", null, "Website:", " ", BdApi.React.createElement("a", {
+    }, "About")), this.state.tab === "plugins" ? BdApi.React.createElement("section", null, BdApi.React.createElement("p", null, "Manage your BetterDiscord plugins from one place. Install each plugin file into your BetterDiscord plugins folder. The shared library is required and stays enabled."), MANAGED_PLUGINS.map(plugin => this.renderPlugin(plugin))) : BdApi.React.createElement("section", null, BdApi.React.createElement("h2", null, "YACBDP"), BdApi.React.createElement("p", null, "This plugin provides shared settings and the plugin dashboard for this collection."), BdApi.React.createElement("p", null, "Website:", " ", BdApi.React.createElement("a", {
       href: "https://flibat.com",
       target: "_blank",
       rel: "noreferrer"
@@ -184,7 +184,7 @@ class PluginDashboard extends BdApi.React.Component {
     }, "GitHub repository"))));
   }
 }
-class YACBDPLibrary {
+class YACBDP {
   api = new BdApi(PLUGIN_NAME);
   getName() {
     return PLUGIN_NAME;
@@ -199,20 +199,36 @@ class YACBDPLibrary {
     return "Shared runtime and plugin dashboard for Yet Another Collection of BetterDiscord Plugins.";
   }
   start() {
-    window.YACBDPLibrary = {
+    window.YACBDP = {
       version: "1.0.0",
       requirePlugin: name => {
         const library = this.api.Plugins.get(PLUGIN_NAME);
         const available = Boolean(library && this.api.Plugins.isEnabled(PLUGIN_NAME));
-        if (!available) this.api.UI.showToast(`${name} requires the YACBDP Library plugin to be enabled.`, {
+        if (!available) this.api.UI.showToast(`${name} requires the YACBDP plugin to be enabled.`, {
           type: "error"
         });
         return available;
+      },
+      buildSettingsPanel: (pluginName, categories, onChange) => {
+        const drawerStates = this.api.Data.load(pluginName, "settings-drawers") ?? {};
+        return this.api.UI.buildSettingsPanel({
+          settings: categories.map(category => ({
+            ...category,
+            type: "category",
+            collapsible: category.collapsible ?? true
+          })),
+          onChange,
+          getDrawerState: (id, defaultShown) => drawerStates[id] ?? defaultShown,
+          onDrawerToggle: (id, shown) => {
+            drawerStates[id] = shown;
+            this.api.Data.save(pluginName, "settings-drawers", drawerStates);
+          }
+        });
       }
     };
   }
   stop() {
-    if (window.YACBDPLibrary?.version === "1.0.0") delete window.YACBDPLibrary;
+    if (window.YACBDP?.version === "1.0.0") delete window.YACBDP;
   }
   getSettingsPanel() {
     return BdApi.React.createElement(PluginDashboard, null);
